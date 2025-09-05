@@ -7,9 +7,11 @@ import prisma, { setCurrentTenantId, clearCurrentTenantId } from './prisma'
  *     localhost:3003 → null (개발환경)
  */
 export function getTenantDomainFromHostname(hostname: string): string | null {
-  // 개발환경 처리
-  if (hostname.includes('localhost') || hostname.includes('127.0.0.1')) {
-    return null
+  // 개발환경 처리 - IP 주소나 localhost인 경우 기본 테넌트 사용
+  if (hostname.includes('localhost') || 
+      hostname.includes('127.0.0.1') || 
+      /^\d+\.\d+\.\d+\.\d+/.test(hostname.split(':')[0])) {
+    return process.env.DEFAULT_TENANT_DOMAIN || 'demo'
   }
   
   // 서브도메인 추출
