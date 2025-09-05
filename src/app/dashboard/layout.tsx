@@ -200,7 +200,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 </Link>
                 
                 <Link 
-                  href="/dashboard/reports" 
+                  href="/dashboard/precautions" 
+                  className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-orange-50 hover:text-orange-700 active:bg-orange-100 focus:outline-none focus:bg-orange-50 transition-all duration-150 cursor-pointer min-h-[48px]"
+                  onClick={() => setShowMenu(false)}
+                >
+                  <div className="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 text-orange-600">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <div className="font-medium">주의사항 관리</div>
+                    <div className="text-xs text-gray-500">주의사항 생성/수정/삭제</div>
+                  </div>
+                </Link>
+                
+                <Link 
+                  href="/dashboard/submissions" 
                   className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-yellow-50 hover:text-yellow-700 active:bg-yellow-100 focus:outline-none focus:bg-yellow-50 transition-all duration-150 cursor-pointer min-h-[48px]"
                   onClick={() => setShowMenu(false)}
                 >
@@ -210,8 +226,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     </svg>
                   </div>
                   <div>
-                    <div className="font-medium">리포트 & 분석</div>
-                    <div className="text-xs text-gray-500">운영 현황 및 통계</div>
+                    <div className="font-medium">제출 현황</div>
+                    <div className="text-xs text-gray-500">직원 제출 현황 확인</div>
                   </div>
                 </Link>
               </div>
@@ -235,6 +251,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </div>
           )}
           
+          {/* 직원용 페이지 바로가기 */}
+          {!!user && (
+            <Link 
+              href="/employee" 
+              className="p-2.5 text-gray-600 hover:text-green-600 hover:bg-green-50 active:text-green-700 active:bg-green-100 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 rounded-xl transition-all duration-150 min-h-[44px] min-w-[44px] flex items-center justify-center border border-gray-200/50"
+              title="직원용 페이지로 이동"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+              </svg>
+            </Link>
+          )}
+
           {/* 설정 메뉴 */}
           {!!user && (
             <Link 
