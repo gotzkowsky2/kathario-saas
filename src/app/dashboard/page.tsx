@@ -3,10 +3,19 @@
 import Link from "next/link";
 
 export default function DashboardPage() {
-  const handleLogout = () => {
-    // TODO: 실제 로그아웃 로직 구현
-    console.log("로그아웃");
-    alert("로그아웃 기능은 아직 구현 중입니다.");
+  const handleLogout = async () => {
+    try {
+      const response = await fetch('/api/auth/logout', {
+        method: 'POST',
+      });
+      
+      // 로그아웃 후 로그인 페이지로 리다이렉트
+      window.location.href = '/login';
+    } catch (error) {
+      console.error('로그아웃 오류:', error);
+      // 오류가 발생해도 로그인 페이지로 리다이렉트
+      window.location.href = '/login';
+    }
   };
 
   return (

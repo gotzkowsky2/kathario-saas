@@ -1,0 +1,580 @@
+// Kathario SaaS - 멀티테넌트 Prisma 스키마
+// 바삭치킨 시스템을 기반으로 한 SaaS 전환
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ========================================
+// 🏢 멀티테넌트 핵심 모델
+// ========================================
+
+model Tenant {
+  id          String   @id @default(cuid())
+  name        String   // "바삭치킨", "맛있는집" 등
+  domain      String   @unique // "basak", "tasty" 등 (서브도메인용)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // 구독 정보
+  subscriptionTier  SubscriptionTier @default(FREE)
+  subscriptionStart DateTime         @default(now())
+  subscriptionEnd   DateTime?
+  
+  // 연락처 정보
+  ownerName    String?
+  ownerEmail   String?
+  ownerPhone   String?
+  address      String?
+  
+  // 설정
+  settings     Json?    // 테넌트별 커스텀 설정
+  
+  // 관계 - 모든 주요 데이터가 테넌트에 속함
+  employees           Employee[]
+  inventoryItems      InventoryItem[]
+  checklistTemplates  ChecklistTemplate[]
+  checklistInstances  ChecklistInstance[]
+  tags               Tag[]
+  manuals            Manual[]
+  precautions        Precaution[]
+  purchaseRequests   PurchaseRequest[]
+  notices            Notice[]
+  favorites          Favorite[]
+  posReports         PosReport[]
+  
+  @@index([domain])
+  @@index([isActive, subscriptionTier])
+}
+
+// ========================================
+// 🔐 인증 및 사용자 관리
+// ========================================
+
+model Employee {
+  id                 String              @id @default(cuid())
+  tenantId           String              // 🔑 테넌트 격리
+  employeeId         String              // 테넌트 내에서 고유한 직원 ID
+  password           String
+  name               String
+  email              String?
+  phone              String?
+  department         String
+  position           String
+  isActive           Boolean             @default(true)
+  isSuperAdmin       Boolean             @default(false)
+  isTempPassword     Boolean             @default(false)
+  address            String?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  
+  // 관계
+  tenant             Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  checklistInstances ChecklistInstance[]
+  favorites          Favorite[]
+  inventoryChecks    InventoryCheck[]
+  notices            Notice[]
+  purchaseRequests   PurchaseRequest[]
+  purchasedItems     PurchaseRequestItem[]
+  lockedTimeSlots    TimeSlotChecklistStatus[]
+  
+  @@unique([tenantId, employeeId]) // 테넌트 내에서만 고유
+  @@index([tenantId, isActive])
+}
+
+// ========================================
+// 📋 체크리스트 시스템
+// ========================================
+
+model ChecklistTemplate {
+  id                  String                         @id @default(cuid())
+  tenantId            String                         // 🔑 테넌트 격리
+  content             String
+  inputter            String
+  inputDate           DateTime                       @default(now())
+  workplace           Workplace
+  category            Category
+  timeSlot            TimeSlot
+  isActive            Boolean                        @default(true)
+  name                String                         @default("")
+  autoGenerateEnabled Boolean                        @default(false)
+  generationTime      String?
+  recurrenceDays      Int[]                          @default([])
+  createdAt           DateTime                       @default(now())
+  updatedAt           DateTime                       @updatedAt
+  
+  // 관계
+  tenant              Tenant                         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  instances           ChecklistInstance[]
+  items               ChecklistItem[]
+  tagRelations        ChecklistTemplateTagRelation[]
+  tags                Tag[]                          @relation("ChecklistTemplateTags")
+  
+  @@index([tenantId, isActive])
+  @@index([tenantId, workplace, timeSlot])
+}
+
+model ChecklistInstance {
+  id                      String                  @id @default(cuid())
+  tenantId                String                  // 🔑 테넌트 격리
+  employeeId              String?
+  templateId              String
+  date                    DateTime
+  workplace               Workplace
+  timeSlot                TimeSlot
+  isCompleted             Boolean                 @default(false)
+  isSubmitted             Boolean                 @default(false)
+  submittedAt             DateTime?
+  isReopened              Boolean                 @default(false)
+  reopenedAt              DateTime?
+  reopenedBy              String?
+  reopenReason            String?
+  notes                   String?
+  completedAt             DateTime?
+  completedBy             String?
+  itemProgress            Json?
+  createdAt               DateTime                @default(now())
+  updatedAt               DateTime                @updatedAt
+  
+  // 관계
+  tenant                  Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee                Employee?               @relation(fields: [employeeId], references: [id])
+  template                ChecklistTemplate       @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  checklistItemProgresses ChecklistItemProgress[] @relation("ChecklistInstanceProgress")
+  connectedItemsProgress  ConnectedItemProgress[]
+  
+  @@unique([tenantId, templateId, date]) // 테넌트별로 템플릿-날짜 조합 고유
+  @@index([tenantId, date])
+  @@index([tenantId, workplace, timeSlot])
+}
+
+model ChecklistItem {
+  id             String                    @id @default(cuid())
+  templateId     String
+  parentId       String?
+  type           String
+  content        String
+  instructions   String?
+  order          Int                       @default(0)
+  isRequired     Boolean                   @default(true)
+  isActive       Boolean                   @default(true)
+  createdAt      DateTime                  @default(now())
+  updatedAt      DateTime                  @updatedAt
+  
+  // 관계
+  parent         ChecklistItem?            @relation("ParentChild", fields: [parentId], references: [id], onDelete: Cascade)
+  children       ChecklistItem[]           @relation("ParentChild")
+  template       ChecklistTemplate         @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  connectedItems ChecklistItemConnection[]
+  progress       ChecklistItemProgress[]
+}
+
+model ChecklistItemProgress {
+  id          String            @id @default(cuid())
+  instanceId  String
+  itemId      String
+  isCompleted Boolean           @default(false)
+  completedBy String?
+  completedAt DateTime?
+  notes       String?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  
+  // 관계
+  instance    ChecklistInstance @relation("ChecklistInstanceProgress", fields: [instanceId], references: [id], onDelete: Cascade)
+  item        ChecklistItem     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  
+  @@unique([instanceId, itemId])
+}
+
+model ChecklistItemConnection {
+  id              String        @id @default(cuid())
+  checklistItemId String
+  itemType        String
+  itemId          String
+  order           Int           @default(0)
+  createdAt       DateTime      @default(now())
+  
+  // 관계
+  checklistItem   ChecklistItem @relation(fields: [checklistItemId], references: [id], onDelete: Cascade)
+  
+  @@unique([checklistItemId, itemType, itemId])
+}
+
+model ConnectedItemProgress {
+  id           String            @id @default(cuid())
+  instanceId   String
+  itemId       String
+  currentStock Int?
+  updatedStock Int?
+  isCompleted  Boolean           @default(false)
+  notes        String?
+  completedAt  DateTime?
+  completedBy  String?
+  connectionId String?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  
+  // 관계
+  instance     ChecklistInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+}
+
+// ========================================
+// 📦 재고 관리 시스템
+// ========================================
+
+model InventoryItem {
+  id            String                     @id @default(cuid())
+  tenantId      String                     // 🔑 테넌트 격리
+  name          String
+  category      Category
+  currentStock  Float
+  minStock      Float
+  unit          String
+  supplier      String?
+  lastUpdated   DateTime                   @default(now())
+  lastCheckedBy String?
+  isActive      Boolean                    @default(true)
+  createdAt     DateTime                   @default(now())
+  updatedAt     DateTime                   @updatedAt
+  
+  // 관계
+  tenant        Tenant                     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  checks        InventoryCheck[]
+  tagRelations  InventoryItemTagRelation[]
+  purchaseItems PurchaseRequestItem[]
+  tags          Tag[]                      @relation("InventoryItemTags")
+  
+  @@index([tenantId, isActive, lastUpdated])
+  @@index([tenantId, category])
+}
+
+model InventoryCheck {
+  id                   String        @id @default(cuid())
+  itemId               String
+  checkedBy            String
+  checkedAt            DateTime      @default(now())
+  currentStock         Float
+  notes                String?
+  needsRestock         Boolean       @default(false)
+  estimatedRestockDate DateTime?
+  
+  // 관계
+  employee             Employee      @relation(fields: [checkedBy], references: [id])
+  item                 InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  
+  @@index([itemId, checkedAt])
+}
+
+// ========================================
+// 🛒 구매 요청 시스템
+// ========================================
+
+model PurchaseRequest {
+  id            String                @id @default(cuid())
+  tenantId      String                // 🔑 테넌트 격리
+  requestedBy   String
+  requestedAt   DateTime              @default(now())
+  status        PurchaseStatus        @default(PENDING)
+  priority      PurchasePriority      @default(MEDIUM)
+  estimatedCost Float?
+  notes         String?
+  approvedBy    String?
+  approvedAt    DateTime?
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+  
+  // 관계
+  tenant        Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee      Employee              @relation(fields: [requestedBy], references: [id])
+  items         PurchaseRequestItem[]
+  
+  @@index([tenantId, status, priority, requestedAt])
+}
+
+model PurchaseRequestItem {
+  id                String          @id @default(cuid())
+  purchaseRequestId String
+  itemId            String
+  quantity          Float
+  unitPrice         Float?
+  notes             String?
+  purchasedBy       String?
+  purchasedAt       DateTime?
+  receivedAt        DateTime?
+  
+  // 관계
+  item              InventoryItem   @relation(fields: [itemId], references: [id])
+  request           PurchaseRequest @relation(fields: [purchaseRequestId], references: [id], onDelete: Cascade)
+  employee          Employee?       @relation(fields: [purchasedBy], references: [id])
+}
+
+// ========================================
+// 🏷️ 태그 시스템
+// ========================================
+
+model Tag {
+  id                         String                         @id @default(cuid())
+  tenantId                   String                         // 🔑 테넌트 격리
+  name                       String
+  color                      String?
+  createdAt                  DateTime                       @default(now())
+  
+  // 관계
+  tenant                     Tenant                         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  checklistTemplateRelations ChecklistTemplateTagRelation[]
+  inventoryItemRelations     InventoryItemTagRelation[]
+  manualRelations            ManualTagRelation[]
+  precautionRelations        PrecautionTagRelation[]
+  checklistTemplates         ChecklistTemplate[]            @relation("ChecklistTemplateTags")
+  inventoryItems             InventoryItem[]                @relation("InventoryItemTags")
+  manuals                    Manual[]                       @relation("ManualTags")
+  precautions                Precaution[]                   @relation("PrecautionTags")
+  
+  @@unique([tenantId, name]) // 테넌트 내에서만 태그명 고유
+  @@index([tenantId])
+}
+
+// 태그 관계 테이블들
+model ChecklistTemplateTagRelation {
+  id         String            @id @default(cuid())
+  templateId String
+  tagId      String
+  createdAt  DateTime          @default(now())
+  
+  tag        Tag               @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  template   ChecklistTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  
+  @@unique([templateId, tagId])
+}
+
+model InventoryItemTagRelation {
+  id        String        @id @default(cuid())
+  itemId    String
+  tagId     String
+  createdAt DateTime      @default(now())
+  
+  item      InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  tag       Tag           @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  
+  @@unique([itemId, tagId])
+}
+
+model PrecautionTagRelation {
+  id           String     @id @default(cuid())
+  precautionId String
+  tagId        String
+  createdAt    DateTime   @default(now())
+  
+  precaution   Precaution @relation(fields: [precautionId], references: [id], onDelete: Cascade)
+  tag          Tag        @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  
+  @@unique([precautionId, tagId])
+}
+
+model ManualTagRelation {
+  id        String   @id @default(cuid())
+  manualId  String
+  tagId     String
+  createdAt DateTime @default(now())
+  
+  manual    Manual   @relation(fields: [manualId], references: [id], onDelete: Cascade)
+  tag       Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  
+  @@unique([manualId, tagId])
+}
+
+// ========================================
+// 📖 매뉴얼 및 주의사항
+// ========================================
+
+model Manual {
+  id                  String                     @id @default(cuid())
+  tenantId            String                     // 🔑 테넌트 격리
+  title               String
+  content             String
+  mediaUrls           String[]
+  workplace           Workplace
+  timeSlot            TimeSlot
+  category            Category
+  version             String                     @default("1.0")
+  isActive            Boolean                    @default(true)
+  createdAt           DateTime                   @default(now())
+  updatedAt           DateTime                   @updatedAt
+  
+  // 관계
+  tenant              Tenant                     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  precautionRelations ManualPrecautionRelation[]
+  tagRelations        ManualTagRelation[]
+  precautions         Precaution[]               @relation("ManualPrecautions")
+  tags                Tag[]                      @relation("ManualTags")
+  
+  @@index([tenantId, isActive])
+  @@index([tenantId, workplace, category])
+}
+
+model Precaution {
+  id              String                     @id @default(cuid())
+  tenantId        String                     // 🔑 테넌트 격리
+  title           String
+  content         String
+  workplace       Workplace
+  timeSlot        TimeSlot
+  priority        Int                        @default(1)
+  isActive        Boolean                    @default(true)
+  createdAt       DateTime                   @default(now())
+  updatedAt       DateTime                   @updatedAt
+  
+  // 관계
+  tenant          Tenant                     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  manualRelations ManualPrecautionRelation[]
+  tagRelations    PrecautionTagRelation[]
+  manuals         Manual[]                   @relation("ManualPrecautions")
+  tags            Tag[]                      @relation("PrecautionTags")
+  
+  @@index([tenantId, isActive])
+  @@index([tenantId, workplace, priority])
+}
+
+model ManualPrecautionRelation {
+  id           String     @id @default(cuid())
+  manualId     String
+  precautionId String
+  order        Int        @default(0)
+  createdAt    DateTime   @default(now())
+  
+  manual       Manual     @relation(fields: [manualId], references: [id], onDelete: Cascade)
+  precaution   Precaution @relation(fields: [precautionId], references: [id], onDelete: Cascade)
+  
+  @@unique([manualId, precautionId])
+}
+
+// ========================================
+// 📢 공지사항 및 기타
+// ========================================
+
+model Notice {
+  id        String   @id @default(cuid())
+  tenantId  String   // 🔑 테넌트 격리
+  title     String
+  content   String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  createdBy String
+  
+  // 관계
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  author    Employee @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+  
+  @@index([tenantId, isActive, createdAt])
+}
+
+model Favorite {
+  id         String         @id @default(cuid())
+  tenantId   String         // 🔑 테넌트 격리
+  employeeId String
+  targetType FavoriteTarget
+  targetId   String
+  createdAt  DateTime       @default(now())
+  
+  // 관계
+  tenant     Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee   Employee       @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  
+  @@unique([tenantId, employeeId, targetType, targetId])
+  @@index([tenantId, employeeId, targetType])
+}
+
+model TimeSlotChecklistStatus {
+  id        String    @id @default(cuid())
+  date      DateTime  @db.Date
+  workplace Workplace
+  timeSlot  TimeSlot
+  lockedBy  String?
+  status    String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  
+  // 관계
+  employee  Employee? @relation(fields: [lockedBy], references: [id])
+  
+  @@unique([date, timeSlot, workplace])
+}
+
+model PosReport {
+  id               String   @id @default(cuid())
+  tenantId         String   // 🔑 테넌트 격리
+  filename         String
+  originalFilename String
+  recordCount      Int
+  uploadDate       DateTime @default(now())
+  uploadedBy       String
+  data             Json
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  
+  // 관계
+  tenant           Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  
+  @@index([tenantId, uploadDate])
+}
+
+// ========================================
+// 📊 Enum 정의
+// ========================================
+
+enum SubscriptionTier {
+  FREE        // 무료 (제한된 기능)
+  PRO         // 프로 (월 구독)
+  ENTERPRISE  // 엔터프라이즈 (연 구독)
+}
+
+enum Workplace {
+  HALL      // 홀
+  KITCHEN   // 주방
+  COMMON    // 공통
+}
+
+enum Category {
+  CHECKLIST    // 체크리스트
+  PRECAUTIONS  // 주의사항
+  HYGIENE      // 위생
+  SUPPLIES     // 용품
+  INGREDIENTS  // 재료
+  COMMON       // 공통
+  MANUAL       // 매뉴얼
+}
+
+enum TimeSlot {
+  PREPARATION  // 준비 (오픈 전)
+  IN_PROGRESS  // 운영 중
+  CLOSING      // 마감
+  COMMON       // 공통
+}
+
+enum PurchaseStatus {
+  PENDING    // 대기
+  APPROVED   // 승인
+  REJECTED   // 거절
+  PURCHASED  // 구매완료
+  RECEIVED   // 입고완료
+}
+
+enum PurchasePriority {
+  LOW     // 낮음
+  MEDIUM  // 보통
+  HIGH    // 높음
+  URGENT  // 긴급
+}
+
+enum FavoriteTarget {
+  MANUAL      // 매뉴얼
+  PRECAUTION  // 주의사항
+}

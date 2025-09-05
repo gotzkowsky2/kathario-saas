@@ -5,23 +5,42 @@ import { useState } from "react";
 
 export default function LoginPage() {
   const [formData, setFormData] = useState({
-    email: "",
+    employeeId: "",
     password: "",
   });
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+    setError("");
     
-    // TODO: 실제 로그인 로직 구현
-    console.log("로그인 시도:", formData);
-    
-    // 임시 지연
-    setTimeout(() => {
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData),
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        setError(data.error || '로그인에 실패했습니다.');
+        return;
+      }
+      
+      // 로그인 성공 - 리다이렉트는 서버에서 처리됨
+      window.location.href = '/dashboard';
+      
+    } catch (error) {
+      console.error('로그인 오류:', error);
+      setError('네트워크 오류가 발생했습니다.');
+    } finally {
       setIsLoading(false);
-      alert("로그인 기능은 아직 구현 중입니다.");
-    }, 1000);
+    }
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -54,21 +73,27 @@ export default function LoginPage() {
 
         {/* Login Form */}
         <div className="bg-white rounded-xl shadow-lg p-8">
+          {error && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+              <p className="text-sm text-red-600">{error}</p>
+            </div>
+          )}
+          
           <form className="space-y-6" onSubmit={handleSubmit}>
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-                이메일 주소
+              <label htmlFor="employeeId" className="block text-sm font-medium text-gray-700 mb-2">
+                직원 ID
               </label>
               <input
-                id="email"
-                name="email"
-                type="email"
-                autoComplete="email"
+                id="employeeId"
+                name="employeeId"
+                type="text"
+                autoComplete="username"
                 required
-                value={formData.email}
+                value={formData.employeeId}
                 onChange={handleChange}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="your@email.com"
+                placeholder="직원 ID를 입력하세요"
               />
             </div>
 
@@ -143,8 +168,8 @@ export default function LoginPage() {
           <div className="mt-6 p-4 bg-gray-50 rounded-lg">
             <h3 className="text-sm font-medium text-gray-700 mb-2">🎯 데모 계정으로 체험해보세요</h3>
             <div className="text-xs text-gray-600 space-y-1">
-              <p><strong>관리자:</strong> admin@basak-chicken.com / demo123</p>
-              <p><strong>직원:</strong> employee@basak-chicken.com / demo123</p>
+              <p><strong>관리자:</strong> admin / demo123</p>
+              <p><strong>직원:</strong> employee / demo123</p>
             </div>
           </div>
         </div>
