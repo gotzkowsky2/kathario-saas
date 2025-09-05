@@ -181,7 +181,9 @@ export function createLoginResponse(user: AuthUser, redirectTo?: string): NextRe
   const role = user.isSuperAdmin ? 'superadmin' : 'employee'
   const cookieValue = createAuthCookie(user.id, user.tenantId, role)
   
-  const response = NextResponse.redirect(new URL(redirectTo || '/dashboard', 'http://localhost:3000'))
+  // 동적 베이스 URL 생성 (포트 자동 감지)
+  const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000'
+  const response = NextResponse.redirect(new URL(redirectTo || '/dashboard', baseUrl))
   
   response.cookies.set(COOKIE_NAME, cookieValue, {
     httpOnly: true,
@@ -198,7 +200,9 @@ export function createLoginResponse(user: AuthUser, redirectTo?: string): NextRe
  * 로그아웃 응답 생성
  */
 export function createLogoutResponse(redirectTo?: string): NextResponse {
-  const response = NextResponse.redirect(new URL(redirectTo || '/login', 'http://localhost:3000'))
+  // 동적 베이스 URL 생성 (포트 자동 감지)
+  const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000'
+  const response = NextResponse.redirect(new URL(redirectTo || '/login', baseUrl))
   
   response.cookies.delete(COOKIE_NAME)
   

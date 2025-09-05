@@ -23,16 +23,33 @@ export default function LoginPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(formData),
+        redirect: 'manual' // 리다이렉트를 수동으로 처리
       });
       
-      const data = await response.json();
+      // 307 리다이렉트인 경우 (로그인 성공)
+      if (response.status === 307) {
+        const location = response.headers.get('location');
+        if (location) {
+          window.location.href = location;
+          return;
+        }
+      }
+      
+      // 다른 응답인 경우 JSON 파싱 시도
+      let data;
+      try {
+        data = await response.json();
+      } catch (e) {
+        setError('서버 응답을 처리할 수 없습니다.');
+        return;
+      }
       
       if (!response.ok) {
         setError(data.error || '로그인에 실패했습니다.');
         return;
       }
       
-      // 로그인 성공 - 리다이렉트는 서버에서 처리됨
+      // 일반적인 성공 응답
       window.location.href = '/dashboard';
       
     } catch (error) {
