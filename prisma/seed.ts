@@ -1,7 +1,7 @@
 // Kathario SaaS - 시드 데이터 생성
 // 테스트용 테넌트와 사용자 데이터 생성
 
-import { PrismaClient } from '../src/generated/prisma'
+import { PrismaClient, Category } from '../src/generated/prisma'
 import bcrypt from 'bcryptjs'
 
 const prisma = new PrismaClient()
@@ -82,7 +82,7 @@ async function main() {
   const inventoryItems = [
     {
       name: '치킨 (냉동)',
-      category: 'INGREDIENTS',
+      category: Category.INGREDIENTS,
       currentStock: 50,
       minStock: 10,
       unit: 'kg',
@@ -90,7 +90,7 @@ async function main() {
     },
     {
       name: '감자튀김',
-      category: 'INGREDIENTS', 
+      category: Category.INGREDIENTS, 
       currentStock: 20,
       minStock: 5,
       unit: 'kg',
@@ -98,7 +98,7 @@ async function main() {
     },
     {
       name: '일회용 컵',
-      category: 'SUPPLIES',
+      category: Category.SUPPLIES,
       currentStock: 500,
       minStock: 100,
       unit: '개',

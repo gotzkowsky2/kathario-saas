@@ -120,7 +120,7 @@ export async function loginUser(credentials: LoginCredentials, tenantId: string)
  */
 export async function getCurrentUser(request: NextRequest): Promise<AuthUser | null> {
   try {
-    const cookieStore = cookies()
+    const cookieStore = await cookies()
     const authCookie = cookieStore.get(COOKIE_NAME)
     
     if (!authCookie) {
