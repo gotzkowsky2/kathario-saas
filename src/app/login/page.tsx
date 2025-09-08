@@ -23,11 +23,18 @@ export default function LoginPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(formData),
-        redirect: 'manual' // 리다이렉트를 수동으로 처리
+        credentials: 'include'
       });
+
+      // 브라우저 fetch는 리다이렉트를 자동으로 따릅니다.
+      // 최종 응답이 리다이렉트된 경우 대상 URL로 이동
+      if (response.redirected && response.url) {
+        window.location.href = response.url;
+        return;
+      }
       
-      // 307 리다이렉트인 경우 (로그인 성공)
-      if (response.status === 307) {
+      // 307/308 리다이렉트 (일부 환경 대비, fallback)
+      if (response.status === 307 || response.status === 308) {
         const location = response.headers.get('location');
         if (location) {
           window.location.href = location;

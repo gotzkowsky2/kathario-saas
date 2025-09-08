@@ -10,9 +10,11 @@ import type { NextRequest } from 'next/server'
  *     localhost:3000 → null (개발환경)
  */
 function getTenantDomainFromHostname(hostname: string): string | null {
-  // 개발환경 처리
-  if (hostname.includes('localhost') || hostname.includes('127.0.0.1')) {
-    return process.env.DEFAULT_TENANT_DOMAIN || null
+  // 개발환경 처리 - localhost, 127.0.0.1, 또는 IP 주소인 경우 기본 테넌트 사용
+  const isLocalHost = hostname.includes('localhost') || hostname.includes('127.0.0.1')
+  const isIpAddress = /^\d+\.\d+\.\d+\.\d+/.test(hostname.split(':')[0])
+  if (isLocalHost || isIpAddress) {
+    return process.env.DEFAULT_TENANT_DOMAIN || 'demo'
   }
   
   // 서브도메인 추출

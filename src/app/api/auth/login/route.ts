@@ -47,8 +47,9 @@ export async function POST(request: NextRequest) {
       )
     }
     
-    // 로그인 성공 응답
-    return createLoginResponse(user, '/dashboard')
+    // 역할 기반 리다이렉트: 직원은 /employee, 슈퍼관리자는 /dashboard
+    const redirectPath = user.isSuperAdmin ? '/dashboard' : '/employee'
+    return createLoginResponse(user, redirectPath, request)
     
   } catch (error) {
     console.error('로그인 API 오류:', error)

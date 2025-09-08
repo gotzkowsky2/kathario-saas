@@ -8,7 +8,8 @@ import prisma, { setCurrentTenantId, clearCurrentTenantId } from '../prisma'
 import { getTenantByDomain, getTenantDomainFromHostname } from '../tenant'
 import { AuthUser, AuthCookie, LoginCredentials } from '../../types/auth'
 
-const COOKIE_NAME = '__Host-kathario_auth'
+// 개발환경에서는 __Host- 접두사를 사용하지 않습니다 (HTTPS + Secure 필수 제약)
+const COOKIE_NAME = process.env.NODE_ENV === 'production' ? '__Host-kathario_auth' : 'kathario_auth'
 const COOKIE_MAX_AGE = 7 * 24 * 60 * 60 // 7일
 
 /**
@@ -177,12 +178,20 @@ export async function getCurrentUser(request: NextRequest): Promise<AuthUser | n
 /**
  * 로그인 응답 생성
  */
-export function createLoginResponse(user: AuthUser, redirectTo?: string): NextResponse {
+export function createLoginResponse(user: AuthUser, redirectTo?: string, request?: NextRequest): NextResponse {
   const role = user.isSuperAdmin ? 'superadmin' : 'employee'
   const cookieValue = createAuthCookie(user.id, user.tenantId, role)
   
-  // 동적 베이스 URL 생성 (포트 자동 감지)
-  const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000'
+  // 요청에서 호스트 정보를 가져와서 동적 URL 생성
+  let baseUrl = 'http://localhost:3003' // 기본값
+  
+  if (request) {
+    const host = request.headers.get('host') || 'localhost:3003'
+    const protocol = request.headers.get('x-forwarded-proto') || 
+                    (process.env.NODE_ENV === 'production' ? 'https' : 'http')
+    baseUrl = `${protocol}://${host}`
+  }
+  
   const response = NextResponse.redirect(new URL(redirectTo || '/dashboard', baseUrl))
   
   response.cookies.set(COOKIE_NAME, cookieValue, {
@@ -199,9 +208,17 @@ export function createLoginResponse(user: AuthUser, redirectTo?: string): NextRe
 /**
  * 로그아웃 응답 생성
  */
-export function createLogoutResponse(redirectTo?: string): NextResponse {
-  // 동적 베이스 URL 생성 (포트 자동 감지)
-  const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000'
+export function createLogoutResponse(redirectTo?: string, request?: NextRequest): NextResponse {
+  // 요청에서 호스트 정보를 가져와서 동적 URL 생성
+  let baseUrl = 'http://localhost:3003' // 기본값
+  
+  if (request) {
+    const host = request.headers.get('host') || 'localhost:3003'
+    const protocol = request.headers.get('x-forwarded-proto') || 
+                    (process.env.NODE_ENV === 'production' ? 'https' : 'http')
+    baseUrl = `${protocol}://${host}`
+  }
+  
   const response = NextResponse.redirect(new URL(redirectTo || '/login', baseUrl))
   
   response.cookies.delete(COOKIE_NAME)
