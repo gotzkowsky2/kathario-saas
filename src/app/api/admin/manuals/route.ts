@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
-import { requireAuth, requireAdmin } from '@/lib/auth'
+import { requireAuth } from '@/lib/auth'
 
 // Create Manual
 export async function POST(request: NextRequest) {
   try {
-    const user = await requireAuth(request)
-    requireAdmin(user)
+    const authResult = await requireAuth(request, { requireAdmin: true });
+    if (!authResult.success) {
+      return NextResponse.json({ error: authResult.error }, { status: 401 });
+    }
+    const { tenantId } = authResult;
 
     const body = await request.json().catch(() => ({})) as any
     const { title, content, workplace = 'COMMON', timeSlot = 'COMMON', category = 'MANUAL', version = '1.0', mediaUrls = [], tags = [], precautions = [], selectedPrecautions = [] } = body
@@ -18,7 +21,7 @@ export async function POST(request: NextRequest) {
     // 1) Create manual
     const manual = await prisma.manual.create({
       data: {
-        tenantId: user.tenantId,
+        tenantId,
         title: String(title).trim(),
         content: String(content).trim(),
         workplace,
@@ -81,8 +84,11 @@ export async function POST(request: NextRequest) {
 // Read Manuals
 export async function GET(request: NextRequest) {
   try {
-    const user = await requireAuth(request)
-    requireAdmin(user)
+    const authResult = await requireAuth(request, { requireAdmin: true });
+    if (!authResult.success) {
+      return NextResponse.json({ error: authResult.error }, { status: 401 });
+    }
+    const { tenantId } = authResult;
 
     const { searchParams } = new URL(request.url)
     const workplace = searchParams.get('workplace')
@@ -90,7 +96,7 @@ export async function GET(request: NextRequest) {
     const category = searchParams.get('category')
     const search = searchParams.get('search')
 
-    const where: any = { tenantId: user.tenantId, isActive: true }
+    const where: any = { tenantId, isActive: true }
     if (workplace && workplace !== 'ALL') where.workplace = workplace
     if (timeSlot && timeSlot !== 'ALL') where.timeSlot = timeSlot
     if (category && category !== 'ALL') where.category = category

@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
-import { requireAuth, requireAdmin } from '@/lib/auth'
+import { requireAuth } from '@/lib/auth'
 
 export async function GET(request: NextRequest) {
   try {
-    const user = await requireAuth(request)
-    requireAdmin(user)
+    const authResult = await requireAuth(request, { requireAdmin: true });
+    if (!authResult.success) {
+      return NextResponse.json({ error: authResult.error }, { status: 401 });
+    }
+    const { tenantId } = authResult;
 
     const { searchParams } = new URL(request.url)
     const page = parseInt(searchParams.get('page') || '1') || 1
@@ -13,7 +16,7 @@ export async function GET(request: NextRequest) {
     const search = (searchParams.get('search') || '').trim()
     const isActiveParam = searchParams.get('isActive')
 
-    const where: any = { tenantId: user.tenantId }
+    const where: any = { tenantId: tenantId }
     if (search) {
       where.OR = [
         { title: { contains: search, mode: 'insensitive' } },
@@ -46,8 +49,11 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const user = await requireAuth(request)
-    requireAdmin(user)
+    const authResult = await requireAuth(request, { requireAdmin: true });
+    if (!authResult.success) {
+      return NextResponse.json({ error: authResult.error }, { status: 401 });
+    }
+    const { user, tenantId } = authResult;
 
     const body = await request.json().catch(() => ({})) as any
     const { title, content, isActive = true } = body || {}
@@ -57,7 +63,7 @@ export async function POST(request: NextRequest) {
 
     const notice = await prisma.notice.create({
       data: {
-        tenantId: user.tenantId,
+        tenantId: tenantId,
         title: String(title).trim(),
         content: String(content).trim(),
         isActive: Boolean(isActive),

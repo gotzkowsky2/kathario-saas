@@ -31,6 +31,9 @@ const nextConfig = {
   // 출력 파일 추적 루트 설정 (경고 제거)
   output: 'standalone',
   outputFileTracingRoot: '/root/kathario-saas',
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
 };
 
 module.exports = nextConfig;

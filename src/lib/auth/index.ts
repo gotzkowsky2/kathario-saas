@@ -123,50 +123,67 @@ export async function getCurrentUser(request: NextRequest): Promise<AuthUser | n
   try {
     const cookieStore = await cookies()
     const authCookie = cookieStore.get(COOKIE_NAME)
-    
-    if (!authCookie) {
-      return null
-    }
-    
-    const payload = parseAuthCookie(authCookie.value)
-    if (!payload) {
-      return null
-    }
-    
-    // 테넌트 컨텍스트 설정
-    setCurrentTenantId(payload.tenantId)
-    
-    const employee = await prisma.employee.findUnique({
-      where: {
-        id: payload.userId
-      },
-      include: {
-        tenant: {
-          select: {
-            id: true,
-            name: true,
-            domain: true,
-            subscriptionTier: true
-          }
-        }
+    const employeeCookie = cookieStore.get('employee_auth')
+    const adminCookie = cookieStore.get('admin_auth')
+
+    // 1) kathario_auth 토큰 우선
+    if (authCookie) {
+      const payload = parseAuthCookie(authCookie.value)
+      if (!payload) {
+        return null
       }
-    })
-    
-    if (!employee || !employee.isActive) {
-      return null
+      
+      // 테넌트 컨텍스트 설정
+      setCurrentTenantId(payload.tenantId)
+      
+      const employee = await prisma.employee.findUnique({
+        where: { id: payload.userId },
+        include: {
+          tenant: { select: { id: true, name: true, domain: true, subscriptionTier: true } }
+        }
+      })
+      if (!employee || !employee.isActive) return null
+      return {
+        id: employee.id,
+        employeeId: employee.employeeId,
+        name: employee.name,
+        email: employee.email || undefined,
+        department: employee.department,
+        position: employee.position,
+        isSuperAdmin: employee.isSuperAdmin,
+        tenantId: employee.tenantId,
+        tenant: employee.tenant
+      }
     }
-    
-    return {
-      id: employee.id,
-      employeeId: employee.employeeId,
-      name: employee.name,
-      email: employee.email || undefined,
-      department: employee.department,
-      position: employee.position,
-      isSuperAdmin: employee.isSuperAdmin,
-      tenantId: employee.tenantId,
-      tenant: employee.tenant
+
+    // 2) employee_auth 또는 admin_auth 쿠키로 폴백 (직원/관리자 로그인 경로)
+    const fallbackUserId = employeeCookie?.value || adminCookie?.value
+    if (fallbackUserId) {
+      const employee = await prisma.employee.findUnique({
+        where: { id: fallbackUserId },
+        include: {
+          tenant: { select: { id: true, name: true, domain: true, subscriptionTier: true } }
+        }
+      })
+      if (!employee || !employee.isActive) return null
+
+      // 테넌트 컨텍스트 설정
+      setCurrentTenantId(employee.tenantId)
+
+      return {
+        id: employee.id,
+        employeeId: employee.employeeId,
+        name: employee.name,
+        email: employee.email || undefined,
+        department: employee.department,
+        position: employee.position,
+        isSuperAdmin: employee.isSuperAdmin,
+        tenantId: employee.tenantId,
+        tenant: employee.tenant
+      }
     }
+
+    return null
   } catch (error) {
     console.error('현재 사용자 조회 오류:', error)
     return null
@@ -264,14 +281,22 @@ export async function authMiddleware(request: NextRequest): Promise<NextResponse
 /**
  * API 라우트용 인증 확인
  */
-export async function requireAuth(request: NextRequest): Promise<AuthUser> {
-  const user = await getCurrentUser(request)
-  
-  if (!user) {
-    throw new Error('인증이 필요합니다')
+export async function requireAuth(request: NextRequest, options?: { requireAdmin?: boolean }): Promise<{ success: true; user: AuthUser; tenantId: string } | { success: false; error: string }> {
+  try {
+    const user = await getCurrentUser(request)
+    
+    if (!user) {
+      return { success: false, error: '인증이 필요합니다' }
+    }
+    
+    if (options?.requireAdmin && !user.isSuperAdmin) {
+      return { success: false, error: '관리자 권한이 필요합니다' }
+    }
+    
+    return { success: true, user, tenantId: user.tenantId }
+  } catch (error) {
+    return { success: false, error: '인증 처리 중 오류가 발생했습니다' }
   }
-  
-  return user
 }
 
 /**

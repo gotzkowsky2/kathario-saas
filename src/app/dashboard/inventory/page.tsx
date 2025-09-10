@@ -87,7 +87,13 @@ export default function InventoryPage() {
   const [activeTagFilters, setActiveTagFilters] = useState<string[]>([]);
 
   const employees = useMemo(() => Array.from(new Set(inventoryItems.map(i => i.updatedBy))), [inventoryItems]);
-  const allTags = useMemo(() => Array.from(new Set(inventoryItems.flatMap(i => i.tags))), [inventoryItems]);
+  const allTags = useMemo(() => {
+    const tagMap = new Map();
+    inventoryItems.flatMap(i => i.tags).forEach(tag => {
+      tagMap.set(tag.id, tag);
+    });
+    return Array.from(tagMap.values());
+  }, [inventoryItems]);
   const filteredRightTags = useMemo(() => allTags.filter(t => t.name.toLowerCase().includes(rightTagQuery.toLowerCase())), [allTags, rightTagQuery]);
 
   const statusOf = (i: InventoryItem) => i.currentStock < i.minStock ? "부족" : (i.currentStock < Math.ceil(i.minStock * 1.2) ? "주의" : "정상");
@@ -285,7 +291,7 @@ export default function InventoryPage() {
           </div>
         )}
 
-        {/* 상단: 재고 업데이트 필요 */}
+      {/* 상단: 재고 업데이트 필요 */}
         <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-white/30 shadow-lg p-6">
           <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center gap-2">
             <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
@@ -307,8 +313,8 @@ export default function InventoryPage() {
             </div>
           ) : (
             <div className="grid gap-3">
-              {criticalItems.map(i => (
-                <div key={i.id} className="bg-white/70 rounded-xl border border-gray-200 p-4 flex items-center justify-between hover:shadow-md transition-shadow">
+            {criticalItems.map(i => (
+                <div key={`critical-${i.id}`} className="bg-white/70 rounded-xl border border-gray-200 p-4 flex items-center justify-between hover:shadow-md transition-shadow">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
                       <span className="font-semibold text-gray-900">{i.name}</span>
@@ -327,7 +333,7 @@ export default function InventoryPage() {
                     </div>
                     <div className="flex flex-wrap gap-1 mt-2">
                       {i.tags.map(tag => (
-                        <span key={tag.id} className="px-2 py-1 text-xs rounded-full text-white" style={{ backgroundColor: tag.color }}>
+                        <span key={`critical-tag-${tag.id}`} className="px-2 py-1 text-xs rounded-full text-white" style={{ backgroundColor: tag.color }}>
                           {tag.name}
                         </span>
                       ))}
@@ -341,10 +347,10 @@ export default function InventoryPage() {
                     {statusOf(i)}
                   </span>
                 </div>
-              ))}
+            ))}
             </div>
-          )}
-        </div>
+        )}
+      </div>
 
         {/* 메인 영역: 좌측 생성/수정 툴(좁게), 우측 현황(넓게) */}
         <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
@@ -376,19 +382,19 @@ export default function InventoryPage() {
                     placeholder="예: 치킨(냉동)" 
                     required
                   />
-                </div>
-                <div>
+            </div>
+            <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">카테고리 *</label>
                   <select 
                     value={category} 
                     onChange={e=>setCategory(e.target.value as Category)} 
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl text-sm text-gray-900 bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                   >
-                    <option value="식자재">식자재</option>
-                    <option value="소모품">소모품</option>
-                  </select>
-                </div>
-                <div>
+                <option value="식자재">식자재</option>
+                <option value="소모품">소모품</option>
+              </select>
+            </div>
+            <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">단위 *</label>
                   <input 
                     value={unit} 
@@ -397,8 +403,8 @@ export default function InventoryPage() {
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl text-sm text-gray-900 placeholder-gray-500 bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" 
                     required
                   />
-                </div>
-                <div>
+            </div>
+            <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">현재 재고 *</label>
                   <input 
                     type="number" 
@@ -409,8 +415,8 @@ export default function InventoryPage() {
                     step="0.1"
                     required
                   />
-                </div>
-                <div>
+            </div>
+            <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">최소 재고 *</label>
                   <input 
                     type="number" 
@@ -421,8 +427,8 @@ export default function InventoryPage() {
                     step="0.1"
                     required
                   />
-                </div>
-                <div>
+            </div>
+            <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">공급업체</label>
                   <input 
                     value={supplier} 
@@ -430,10 +436,10 @@ export default function InventoryPage() {
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl text-sm text-gray-900 placeholder-gray-500 bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" 
                     placeholder="예: Panasia" 
                   />
-                </div>
-              </div>
+            </div>
+          </div>
 
-              {/* 태그 선택/추가 */}
+          {/* 태그 선택/추가 */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <label className="block text-sm font-medium text-gray-700">태그</label>
@@ -445,23 +451,23 @@ export default function InventoryPage() {
                     태그 추가
                   </button>
                 </div>
-                <div className="space-y-2">
+          <div className="space-y-2">
                   <input 
                     value={tagQuery} 
                     onChange={e=>setTagQuery(e.target.value)} 
                     placeholder="태그 검색" 
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 placeholder-gray-500 bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" 
                   />
-                  {/* 선택된 태그 */}
+            {/* 선택된 태그 */}
                   <div className="min-h-[40px] flex flex-wrap gap-2 p-3 rounded-lg bg-gray-50 border border-gray-200">
-                    {selectedTags.length === 0 ? (
+              {selectedTags.length === 0 ? (
                       <span className="text-sm text-gray-500">선택된 태그가 없습니다.</span>
                     ) : (
                       selectedTags.map(tagId => {
                         const tag = tags.find(t => t.id === tagId);
                         return tag ? (
                           <button 
-                            key={tagId} 
+                            key={`selected-${tagId}`} 
                             type="button" 
                             onClick={()=>toggleSelectTag(tagId)} 
                             className="px-3 py-1 text-sm rounded-full text-white hover:opacity-80 transition-opacity flex items-center gap-1"
@@ -472,13 +478,13 @@ export default function InventoryPage() {
                           </button>
                         ) : null;
                       })
-                    )}
-                  </div>
-                  {/* 사용 가능한 태그 */}
+              )}
+            </div>
+            {/* 사용 가능한 태그 */}
                   <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto">
                     {filteredTags.map(tag => (
                       <button 
-                        key={tag.id} 
+                        key={`available-${tag.id}`} 
                         type="button" 
                         onClick={()=>toggleSelectTag(tag.id)} 
                         className={`px-3 py-1.5 text-sm rounded-full border transition-all ${
@@ -495,10 +501,10 @@ export default function InventoryPage() {
                       </button>
                     ))}
                   </div>
-                </div>
-              </div>
+            </div>
+          </div>
 
-              <div className="pt-2">
+          <div className="pt-2">
                 <button 
                   type="submit"
                   className={`w-full px-6 py-3 rounded-xl text-white font-medium transition-all transform hover:scale-[1.02] shadow-lg ${
@@ -520,7 +526,7 @@ export default function InventoryPage() {
               재고 현황
             </h3>
             
-            {/* 필터 바 */}
+          {/* 필터 바 */}
             <div className="bg-gray-50/80 rounded-xl p-4 space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-3">
                 <input 
@@ -535,9 +541,9 @@ export default function InventoryPage() {
                   className="px-4 py-2.5 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                 >
                   <option value="전체">전체 카테고리</option>
-                  <option value="식자재">식자재</option>
-                  <option value="소모품">소모품</option>
-                </select>
+              <option value="식자재">식자재</option>
+              <option value="소모품">소모품</option>
+            </select>
                 <label className="inline-flex items-center gap-2 px-4 py-2.5 border border-gray-300 rounded-lg text-sm bg-white cursor-pointer hover:bg-gray-50 transition-colors">
                   <input 
                     type="checkbox" 
@@ -546,30 +552,30 @@ export default function InventoryPage() {
                     className="text-blue-600 focus:ring-blue-500"
                   />
                   <span className="text-gray-700">부족만 표시</span>
-                </label>
+            </label>
                 <select 
                   value={employee} 
                   onChange={e=>setEmployee(e.target.value)} 
                   className="px-4 py-2.5 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                 >
                   <option value="전체">전체 직원</option>
-                  {employees.map(emp => <option key={emp} value={emp}>{emp}</option>)}
-                </select>
+              {employees.map((emp, idx) => <option key={`employee-${idx}-${emp}`} value={emp}>{emp}</option>)}
+            </select>
                 <input 
                   value={rightTagQuery} 
                   onChange={e=>setRightTagQuery(e.target.value)} 
                   placeholder="태그 검색" 
                   className="px-4 py-2.5 border border-gray-300 rounded-lg text-sm text-gray-900 placeholder-gray-500 bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" 
                 />
-              </div>
+            </div>
               
-              {/* 태그 필터 칩 */}
-              <div className="flex flex-wrap gap-2">
-                {filteredRightTags.map(tag => {
+          {/* 태그 필터 칩 */}
+          <div className="flex flex-wrap gap-2">
+                {filteredRightTags.map((tag, index) => {
                   const active = activeTagFilters.includes(tag.id);
-                  return (
+              return (
                     <button 
-                      key={tag.id} 
+                      key={`filter-${index}-${tag.id}`} 
                       type="button" 
                       onClick={() => setActiveTagFilters(active ? activeTagFilters.filter(x=>x!==tag.id) : [...activeTagFilters, tag.id])} 
                       className={`px-3 py-1.5 text-sm rounded-full border transition-all ${
@@ -584,9 +590,9 @@ export default function InventoryPage() {
                     >
                       {tag.name}
                     </button>
-                  );
-                })}
-                {activeTagFilters.length > 0 && (
+              );
+            })}
+            {activeTagFilters.length > 0 && (
                   <button 
                     type="button" 
                     onClick={()=>setActiveTagFilters([])} 
@@ -596,7 +602,7 @@ export default function InventoryPage() {
                   </button>
                 )}
               </div>
-            </div>
+          </div>
 
             {/* 리스트 */}
             {loading ? (
@@ -618,8 +624,8 @@ export default function InventoryPage() {
               <>
                 {/* 데스크탑 테이블 */}
                 <div className="hidden lg:block overflow-auto rounded-xl border border-gray-200">
-                  <table className="min-w-full text-sm">
-                    <thead className="bg-gray-50/80">
+            <table className="min-w-full text-sm">
+              <thead className="bg-gray-50/80">
                       <tr className="text-left text-gray-700 font-medium">
                         <th className="px-4 py-4 min-w-[200px]">아이템 정보</th>
                         <th className="px-3 py-4 w-28 text-center">구분</th>
@@ -629,14 +635,14 @@ export default function InventoryPage() {
                         <th className="px-4 py-4 min-w-[120px]">공급업체</th>
                         <th className="px-4 py-4 w-32 text-center">업데이트</th>
                         <th className="px-3 py-4 w-20 text-center">관리</th>
-                      </tr>
-                    </thead>
+                </tr>
+              </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
                       {filteredItems.map(item => {
                         const config = categoryConfig[item.category];
                         const status = statusOf(item);
                         return (
-                          <tr key={item.id} className="hover:bg-gray-50/50 transition-colors">
+                          <tr key={`desktop-${item.id}`} className="hover:bg-gray-50/50 transition-colors">
                             {/* 아이템 정보 */}
                             <td className="px-4 py-4">
                               <div className="font-semibold text-gray-900 mb-1">{item.name}</div>
@@ -661,14 +667,14 @@ export default function InventoryPage() {
                                   {config.shortName}
                                 </span>
                               </div>
-                            </td>
+                    </td>
                             
                             {/* 태그 */}
                             <td className="px-3 py-4">
-                              <div className="flex flex-wrap gap-1">
+                      <div className="flex flex-wrap gap-1">
                                 {item.tags.slice(0, 2).map(tag => (
                                   <span 
-                                    key={tag.id} 
+                                    key={`desktop-tag-${tag.id}`} 
                                     className="px-2 py-0.5 text-xs rounded-full text-white"
                                     style={{ backgroundColor: tag.color }}
                                   >
@@ -715,8 +721,8 @@ export default function InventoryPage() {
                             <td className="px-4 py-4">
                               <div className="text-gray-700 truncate" title={item.supplier || '미지정'}>
                                 {item.supplier || '-'}
-                              </div>
-                            </td>
+                      </div>
+                    </td>
                             
                             {/* 업데이트 */}
                             <td className="px-4 py-4 text-center">
@@ -745,20 +751,20 @@ export default function InventoryPage() {
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                   </svg>
                                 </button>
-                              </div>
-                            </td>
-                          </tr>
+                      </div>
+                    </td>
+                  </tr>
                         );
                       })}
-                    </tbody>
-                  </table>
-                </div>
+              </tbody>
+            </table>
+          </div>
 
-                {/* 모바일 카드 */}
+          {/* 모바일 카드 */}
                 <div className="grid lg:hidden grid-cols-1 gap-4">
                   {filteredItems.map(item => (
-                    <div key={item.id} className="rounded-xl border border-gray-200 bg-white/80 p-5 shadow-sm hover:shadow-md transition-shadow">
-                      {/* 상단: 이름 + 상태 */}
+                    <div key={`mobile-${item.id}`} className="rounded-xl border border-gray-200 bg-white/80 p-5 shadow-sm hover:shadow-md transition-shadow">
+                {/* 상단: 이름 + 상태 */}
                       <div className="flex items-start justify-between gap-3 mb-3">
                         <div className="min-w-0 flex-1">
                           <div className="font-semibold text-gray-900 text-base leading-snug break-words">{item.name}</div>
@@ -817,7 +823,7 @@ export default function InventoryPage() {
                           <div className="flex flex-wrap gap-1">
                             {item.tags.map(tag => (
                               <span 
-                                key={tag.id} 
+                                key={`mobile-tag-${tag.id}`} 
                                 className="px-2 py-1 text-xs rounded-full text-white"
                                 style={{ backgroundColor: tag.color }}
                               >
@@ -848,7 +854,7 @@ export default function InventoryPage() {
                           삭제
                         </button>
                       </div>
-                    </div>
+                  </div>
                   ))}
                 </div>
               </>

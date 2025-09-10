@@ -58,6 +58,42 @@ export async function middleware(request: NextRequest) {
     // 요청 헤더에 테넌트 도메인 정보 추가 (실제 검증은 API에서)
     const requestHeaders = new Headers(request.headers)
     requestHeaders.set('x-tenant-domain', tenantDomain)
+    
+    // ==== 역할 기반 접근 제어 (RBAC) ====
+    const employeeCookie = request.cookies.get('employee_auth')?.value || ''
+    const adminFlagCookie = request.cookies.get('admin_auth')?.value || ''
+    const katharioCookie = request.cookies.get(process.env.NODE_ENV === 'production' ? '__Host-kathario_auth' : 'kathario_auth')?.value || ''
+
+    // kathario_auth는 base64 JSON 페이로드를 담고 있음 → role 확인 시도
+    let katharioRole: 'employee' | 'superadmin' | null = null
+    try {
+      if (katharioCookie) {
+        const decoded = JSON.parse(globalThis.atob(katharioCookie))
+        if (decoded && (decoded.role === 'employee' || decoded.role === 'superadmin')) {
+          katharioRole = decoded.role
+        }
+      }
+    } catch {}
+
+    const isLoggedInAsEmployee = Boolean(employeeCookie || katharioCookie || adminFlagCookie)
+    const isLoggedInAsAdmin = Boolean(
+      adminFlagCookie || katharioRole === 'superadmin'
+    )
+
+    // /dashboard/* → 관리자만 접근 허용
+    if (pathname.startsWith('/dashboard')) {
+      if (!isLoggedInAsAdmin) {
+        // 직원/비로그인: 직원 로그인 페이지로 이동
+        return NextResponse.redirect(new URL('/employee/login', request.url))
+      }
+    }
+
+    // /employee/* → 직원 또는 관리자 접근 허용, 비로그인은 직원 로그인으로
+    if (pathname.startsWith('/employee')) {
+      if (!isLoggedInAsEmployee) {
+        return NextResponse.redirect(new URL('/employee/login', request.url))
+      }
+    }
 
     return NextResponse.next({
       request: {

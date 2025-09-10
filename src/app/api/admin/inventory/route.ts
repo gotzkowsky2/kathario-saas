@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
-import { requireAuth, requireAdmin } from '@/lib/auth'
+import { requireAuth } from '@/lib/auth'
 
 // GET /api/admin/inventory - 재고 아이템 목록 조회
 export async function GET(request: NextRequest) {
   try {
-    const user = await requireAuth(request)
-    requireAdmin(user)
+    const authResult = await requireAuth(request, { requireAdmin: true });
+    if (!authResult.success) {
+      return NextResponse.json({ error: authResult.error }, { status: 401 });
+    }
+    const { tenantId } = authResult;
 
     const { searchParams } = new URL(request.url)
     const page = parseInt(searchParams.get('page') || '1') || 1
@@ -16,7 +19,7 @@ export async function GET(request: NextRequest) {
     const onlyLow = searchParams.get('onlyLow') === 'true'
 
     const where: any = { 
-      tenantId: user.tenantId,
+      tenantId,
       isActive: true
     }
 
@@ -73,8 +76,11 @@ export async function GET(request: NextRequest) {
 // POST /api/admin/inventory - 새 재고 아이템 생성
 export async function POST(request: NextRequest) {
   try {
-    const user = await requireAuth(request)
-    requireAdmin(user)
+    const authResult = await requireAuth(request, { requireAdmin: true });
+    if (!authResult.success) {
+      return NextResponse.json({ error: authResult.error }, { status: 401 });
+    }
+    const { tenantId, user } = authResult;
 
     const body = await request.json()
     const { name, category, unit, currentStock, minStock, supplier, tags } = body
@@ -86,7 +92,7 @@ export async function POST(request: NextRequest) {
     // 재고 아이템 생성
     const inventoryItem = await prisma.inventoryItem.create({
       data: {
-        tenantId: user.tenantId,
+        tenantId: tenantId,
         name: name.trim(),
         category,
         unit: unit.trim(),
@@ -128,8 +134,11 @@ export async function POST(request: NextRequest) {
 // PUT /api/admin/inventory - 재고 아이템 수정
 export async function PUT(request: NextRequest) {
   try {
-    const user = await requireAuth(request)
-    requireAdmin(user)
+    const authResult = await requireAuth(request, { requireAdmin: true });
+    if (!authResult.success) {
+      return NextResponse.json({ error: authResult.error }, { status: 401 });
+    }
+    const { tenantId, user } = authResult;
 
     const body = await request.json()
     const { id, name, category, unit, currentStock, minStock, supplier, tags } = body
@@ -140,7 +149,7 @@ export async function PUT(request: NextRequest) {
 
     // 기존 아이템 확인
     const existingItem = await prisma.inventoryItem.findFirst({
-      where: { id, tenantId: user.tenantId }
+      where: { id, tenantId: tenantId }
     })
 
     if (!existingItem) {
@@ -192,8 +201,11 @@ export async function PUT(request: NextRequest) {
 // DELETE /api/admin/inventory - 재고 아이템 삭제
 export async function DELETE(request: NextRequest) {
   try {
-    const user = await requireAuth(request)
-    requireAdmin(user)
+    const authResult = await requireAuth(request, { requireAdmin: true });
+    if (!authResult.success) {
+      return NextResponse.json({ error: authResult.error }, { status: 401 });
+    }
+    const { tenantId } = authResult;
 
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
@@ -204,7 +216,7 @@ export async function DELETE(request: NextRequest) {
 
     // 기존 아이템 확인
     const existingItem = await prisma.inventoryItem.findFirst({
-      where: { id, tenantId: user.tenantId }
+      where: { id, tenantId: tenantId }
     })
 
     if (!existingItem) {
