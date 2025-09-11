@@ -1,34 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { parseAuthCookie } from '@/lib/auth';
 
 async function verifyEmployee(request: NextRequest) {
-  // 우선 순위: employee_auth → admin_auth → kathario_auth
-  const employeeAuth = request.cookies.get('employee_auth')?.value;
-  const adminAuth = request.cookies.get('admin_auth')?.value;
-  const katharioCookieName = process.env.NODE_ENV === 'production' ? '__Host-kathario_auth' : 'kathario_auth'
-  const katharioAuth = request.cookies.get(katharioCookieName)?.value
+  const cookieName = process.env.NODE_ENV === 'production' ? '__Host-kathario_auth' : 'kathario_auth'
+  const katharioAuth = request.cookies.get(cookieName)?.value
 
-  let userId: string | null = employeeAuth || adminAuth || null
-
-  // kathario_auth를 통해 userId 복원 (base64 JSON)
-  if (!userId && katharioAuth) {
-    try {
-      const payload = JSON.parse(Buffer.from(katharioAuth, 'base64').toString())
-      if (payload?.userId) {
-        userId = payload.userId as string
-      }
-    } catch {}
+  if (katharioAuth) {
+    const payload = parseAuthCookie(katharioAuth || '')
+    if (payload?.userId) {
+      const employee = await prisma.employee.findUnique({
+        where: { id: payload.userId },
+        select: { id: true, name: true, tenantId: true, isSuperAdmin: true }
+      })
+      if (employee) return employee
+    }
   }
 
-  if (!userId) throw new Error('로그인이 필요합니다.');
+  // 레거시 폴백
+  const employeeAuth = request.cookies.get('employee_auth')?.value
+  const adminAuth = request.cookies.get('admin_auth')?.value
+  const userId = employeeAuth || adminAuth || null
 
-  const employee = await prisma.employee.findUnique({ 
-    where: { id: userId }, 
-    select: { id: true, name: true, tenantId: true, isSuperAdmin: true } 
-  });
-  
-  if (!employee) throw new Error('유효하지 않은 인증');
-  return employee;
+  if (userId) {
+    const employee = await prisma.employee.findUnique({
+      where: { id: userId },
+      select: { id: true, name: true, tenantId: true, isSuperAdmin: true }
+    })
+    if (employee) return employee
+  }
+
+  throw new Error('로그인이 필요합니다.')
 }
 
 export async function GET(request: NextRequest) {
@@ -60,30 +62,31 @@ export async function GET(request: NextRequest) {
     const templates = await prisma.checklistTemplate.findMany({
       where: whereClause,
       include: {
-        _count: {
-          select: {
-            items: {
-              where: { parentId: null }
-            }
-          }
+        items: {
+          where: { isActive: true },
+          include: { connectedItems: true },
+          orderBy: { order: 'asc' }
         },
         instances: {
           where: {
-            createdAt: {
-              gte: today,
-              lt: tomorrow
-            }
+            OR: [
+              {
+                date: {
+                  gte: today,
+                  lt: tomorrow
+                }
+              },
+              {
+                createdAt: {
+                  gte: today,
+                  lt: tomorrow
+                }
+              }
+            ]
           },
           include: {
-            _count: {
-              select: {
-                checklistItemProgresses: true
-              }
-            },
-            checklistItemProgresses: {
-              where: { isCompleted: true },
-              select: { id: true }
-            }
+            checklistItemProgresses: { where: { isCompleted: true }, select: { id: true } },
+            connectedItemsProgress: { where: { isCompleted: true }, select: { id: true } },
           }
         }
       },
@@ -95,10 +98,34 @@ export async function GET(request: NextRequest) {
     });
 
     // 응답 데이터 구성
-    const checklists = templates.map(template => {
-      const instance = template.instances[0]; // 오늘의 인스턴스
-      const itemCount = template._count.items;
-      const completedCount = instance ? instance.checklistItemProgresses.length : 0;
+    const checklists = await Promise.all(templates.map(async (template) => {
+      const instance = (template as any).instances[0]; // 오늘의 인스턴스
+      const templateItems = (template as any).items as Array<any>;
+      // 합산 기준: 상위 항목(템플릿의 실 항목 수) + 모든 연결항목 개수
+      const totalMain = templateItems.length;
+      const totalConnected = templateItems.reduce((sum, it) => sum + ((it.connectedItems||[]).length), 0);
+      const itemCount = totalMain + totalConnected;
+
+      // 완료 수: 메인 완료 + 연결항목 완료
+      const completedMain = instance ? (instance.checklistItemProgresses?.length || 0) : 0;
+      const completedConnected = instance ? (instance.connectedItemsProgress?.length || 0) : 0;
+      // 매뉴얼에 연결된 주의사항 총합(배지용)
+      const manualIds = templateItems.flatMap((it:any)=> (it.connectedItems||[])
+        .filter((c:any)=>c.itemType==='manual')
+        .map((c:any)=>c.itemId))
+      let manualConnectedPrecautions = 0
+      if (manualIds.length > 0) {
+        const rels = await prisma.manualPrecautionRelation.findMany({
+          where: {
+            manualId: { in: manualIds },
+            manual: { tenantId: employee.tenantId },
+            precaution: { tenantId: employee.tenantId }
+          },
+          select: { manualId: true }
+        })
+        manualConnectedPrecautions = rels.length
+      }
+      const completedCount = completedMain + completedConnected;
       const totalProgress = itemCount > 0 ? Math.round((completedCount / itemCount) * 100) : 0;
       
       let status = 'pending';
@@ -122,9 +149,10 @@ export async function GET(request: NextRequest) {
         status,
         instanceId: instance?.id || null,
         isCompleted: !!instance?.completedAt,
-        createdAt: template.createdAt
+        createdAt: template.createdAt,
+        manualConnectedPrecautions
       };
-    });
+    }));
 
     return NextResponse.json(checklists);
   } catch (error: any) {

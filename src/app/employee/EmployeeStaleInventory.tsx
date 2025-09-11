@@ -5,17 +5,20 @@ import React, { useEffect, useState } from "react";
 export default function EmployeeStaleInventory({ onSelect }: { onSelect: (item: any) => void }) {
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const didFetchRef = React.useRef(false);
 
   useEffect(() => {
+    if (didFetchRef.current) return;
+    didFetchRef.current = true;
     (async () => {
       try {
-        const r = await fetch('/api/employee/inventory/stale?days=2', { 
-          credentials: 'include', 
-          cache: 'no-store' 
+        const r = await fetch('/api/employee/inventory/stale?days=2', {
+          credentials: 'include',
+          cache: 'no-store',
         });
         if (r.ok) {
           const d = await r.json();
-          setItems(d.items || []);
+          setItems(Array.isArray(d.items) ? d.items : []);
         }
       } catch (error) {
         console.error('재고 업데이트 필요 항목 로딩 실패:', error);
@@ -90,7 +93,7 @@ export default function EmployeeStaleInventory({ onSelect }: { onSelect: (item: 
                       {config.name}
                     </span>
                     {isLowStock && (
-                      <span className="px-2 py-1 text-xs font-bold bg-red-500 text-white rounded-full animate-pulse">
+                      <span className="px-2 py-1 text-xs font-bold bg-red-500 text-white rounded-full">
                         재고부족
                       </span>
                     )}

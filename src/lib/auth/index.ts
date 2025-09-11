@@ -210,10 +210,13 @@ export function createLoginResponse(user: AuthUser, redirectTo?: string, request
   }
   
   const response = NextResponse.redirect(new URL(redirectTo || '/dashboard', baseUrl))
-  
+  // 실제 요청 프로토콜 기준으로 Secure 여부 결정 (HTTP이면 전송되도록)
+  const reqProto = request?.headers.get('x-forwarded-proto') || (process.env.NODE_ENV === 'production' ? 'https' : 'http')
+  const isSecure = reqProto === 'https'
+
   response.cookies.set(COOKIE_NAME, cookieValue, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: isSecure,
     sameSite: 'lax',
     maxAge: COOKIE_MAX_AGE,
     path: '/'
@@ -237,8 +240,13 @@ export function createLogoutResponse(redirectTo?: string, request?: NextRequest)
   }
   
   const response = NextResponse.redirect(new URL(redirectTo || '/login', baseUrl))
-  
+  const reqProto = request?.headers.get('x-forwarded-proto') || (process.env.NODE_ENV === 'production' ? 'https' : 'http')
+  const isSecure = reqProto === 'https'
+
   response.cookies.delete(COOKIE_NAME)
+  // 레거시 쿠키도 함께 제거
+  response.cookies.set('employee_auth', '', { httpOnly: true, secure: isSecure, maxAge: 0, path: '/' })
+  response.cookies.set('admin_auth', '', { httpOnly: true, secure: isSecure, maxAge: 0, path: '/' })
   
   return response
 }

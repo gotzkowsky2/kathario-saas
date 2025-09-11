@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
         if (!p || !p.title || !p.content) continue
         const newPrecaution = await prisma.precaution.create({
           data: {
-            tenantId: user.tenantId,
+            tenantId,
             title: String(p.title).trim(),
             content: String(p.content).trim(),
             workplace: p.workplace || 'COMMON',
@@ -163,14 +163,17 @@ export async function GET(request: NextRequest) {
 // Update Manual
 export async function PUT(request: NextRequest) {
   try {
-    const user = await requireAuth(request)
-    requireAdmin(user)
+    const authResult = await requireAuth(request, { requireAdmin: true });
+    if (!authResult.success) {
+      return NextResponse.json({ error: authResult.error }, { status: 401 });
+    }
+    const { tenantId } = authResult;
 
     const body = await request.json().catch(() => ({})) as any
     const { id, title, content, workplace, timeSlot, category, version, mediaUrls, tags = [], precautions = [], selectedPrecautions = [] } = body
     if (!id) return NextResponse.json({ error: '메뉴얼 ID가 필요합니다.' }, { status: 400 })
 
-    const existing = await prisma.manual.findFirst({ where: { id, tenantId: user.tenantId } })
+    const existing = await prisma.manual.findFirst({ where: { id, tenantId } })
     if (!existing) return NextResponse.json({ error: '존재하지 않거나 권한이 없습니다.' }, { status: 404 })
 
     const updated = await prisma.manual.update({
@@ -204,7 +207,7 @@ export async function PUT(request: NextRequest) {
         if (!p || !p.title || !p.content) continue
         const newPrecaution = await prisma.precaution.create({
           data: {
-            tenantId: user.tenantId,
+            tenantId,
             title: String(p.title).trim(),
             content: String(p.content).trim(),
             workplace: p.workplace || 'COMMON',
@@ -238,7 +241,7 @@ export async function DELETE(request: NextRequest) {
     const id = searchParams.get('id') || ''
     if (!id) return NextResponse.json({ error: '메뉴얼 ID가 필요합니다.' }, { status: 400 })
 
-    const existing = await prisma.manual.findFirst({ where: { id, tenantId: user.tenantId } })
+    const existing = await prisma.manual.findFirst({ where: { id, tenantId } })
     if (!existing) return NextResponse.json({ error: '존재하지 않거나 권한이 없습니다.' }, { status: 404 })
 
     await prisma.manualTagRelation.deleteMany({ where: { manualId: id } })

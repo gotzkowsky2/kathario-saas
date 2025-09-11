@@ -180,7 +180,7 @@ export async function POST(request: NextRequest) {
           await tx.checklistItemProgress.create({
             data: {
               instanceId: instance.id,
-              checklistItemId: item.id,
+              itemId: item.id,
               isCompleted: false
             }
           });

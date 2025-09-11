@@ -7,9 +7,10 @@ declare global {
   var __prisma: PrismaClient | undefined
 }
 
-// 싱글톤 패턴으로 Prisma 클라이언트 생성
+const logLevel = process.env.NODE_ENV === 'production' ? ['error', 'warn'] : ['query', 'error', 'warn'] as const
+
 export const prisma = globalThis.__prisma || new PrismaClient({
-  log: ['query', 'error', 'warn'],
+  log: logLevel as any,
 })
 
 if (process.env.NODE_ENV !== 'production') {

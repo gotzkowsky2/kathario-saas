@@ -1,20 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { parseAuthCookie } from '@/lib/auth';
 
 async function verifyEmployee(request: NextRequest) {
+  // 1) 새 kathario_auth 토큰 우선 (admin/employee 공통)
+  const cookieName = process.env.NODE_ENV === 'production' ? '__Host-kathario_auth' : 'kathario_auth';
+  const katharioToken = request.cookies.get(cookieName)?.value;
+  if (katharioToken) {
+    const payload = parseAuthCookie(katharioToken);
+    if (payload?.userId) {
+      const employee = await prisma.employee.findUnique({
+        where: { id: payload.userId },
+        select: { id: true, name: true, tenantId: true }
+      });
+      if (employee) return employee;
+    }
+  }
+
+  // 2) 레거시 폴백: employee_auth/admin_auth에 사용자 ID가 직접 들어있는 경우
   const employeeAuth = request.cookies.get('employee_auth')?.value;
   const adminAuth = request.cookies.get('admin_auth')?.value;
-  const id = employeeAuth || adminAuth;
-  
-  if (!id) throw new Error('로그인이 필요합니다.');
-  
-  const employee = await prisma.employee.findUnique({ 
-    where: { id }, 
-    select: { id: true, name: true, tenantId: true } 
-  });
-  
-  if (!employee) throw new Error('유효하지 않은 인증');
-  return employee;
+  const fallbackId = employeeAuth || adminAuth;
+  if (fallbackId) {
+    const employee = await prisma.employee.findUnique({
+      where: { id: fallbackId },
+      select: { id: true, name: true, tenantId: true }
+    });
+    if (employee) return employee;
+  }
+
+  throw new Error('로그인이 필요합니다.');
 }
 
 export async function GET(request: NextRequest) {
@@ -81,12 +96,42 @@ export async function GET(request: NextRequest) {
       }),
     ]);
 
-    return NextResponse.json({ 
-      notices, 
-      updatedManuals: manuals, 
-      newPrecautions: precautions, 
-      metadata: { cutoffDate: sevenDaysAgo.toISOString() } 
+    // 재고 업데이트 필요(상위 5개)까지 함께 제공하여 추가 네트워크 요청 제거
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 2);
+    const inventoryStale = await prisma.inventoryItem.findMany({
+      where: {
+        tenantId: employee.tenantId,
+        OR: [
+          { lastUpdated: { lt: cutoff } },
+          { checks: { none: {} } },
+        ],
+        isActive: true,
+      },
+      orderBy: [{ lastUpdated: 'asc' }, { updatedAt: 'asc' }],
+      take: 5,
+      select: {
+        id: true,
+        name: true,
+        category: true,
+        currentStock: true,
+        minStock: true,
+        unit: true,
+        lastUpdated: true,
+        // createdAt, lastCheckedBy 필드는 선택적 – 존재 시 클라이언트에서 사용
+      },
     });
+
+    const res = NextResponse.json({
+      notices,
+      updatedManuals: manuals,
+      newPrecautions: precautions,
+      inventoryStale,
+      metadata: { cutoffDate: sevenDaysAgo.toISOString() }
+    })
+    // 초단기 캐시: 15초 (프록시 캐시 대상, 브라우저는 no-store 유지)
+    res.headers.set('Cache-Control', 'public, s-maxage=15, stale-while-revalidate=30')
+    return res
   } catch (e: any) {
     console.error('피드 조회 오류:', e);
     return NextResponse.json({ error: e.message || '조회 실패' }, { status: 500 });

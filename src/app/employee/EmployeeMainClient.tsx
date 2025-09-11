@@ -4,19 +4,23 @@ import React from "react";
 import { useEffect, useState } from "react";
 import EmployeeStaleInventory from "./EmployeeStaleInventory";
 
-type Feed = { notices: any[]; updatedManuals: any[]; newPrecautions: any[] };
+type Feed = { notices: any[]; updatedManuals: any[]; newPrecautions: any[]; inventoryStale?: any[] };
 
 export default function EmployeeMainClient() {
   const [feed, setFeed] = useState<Feed | null>(null);
   const [loading, setLoading] = useState(true);
+  const didFetchRef = React.useRef(false);
   
   useEffect(() => { 
-    (async () => { 
-      try { 
-        const r = await fetch('/api/employee/feed', { credentials: 'include' }); 
-        if (r.ok) { 
-          setFeed(await r.json()); 
-        } 
+    if (didFetchRef.current) return;
+    didFetchRef.current = true;
+    (async () => {
+      try {
+        const r = await fetch('/api/employee/feed', { credentials: 'include' });
+        if (r.ok) {
+          const data = await r.json();
+          setFeed(data);
+        }
       } catch (error) {
         console.error('피드 로딩 실패:', error);
       } finally {
@@ -84,9 +88,11 @@ export default function EmployeeMainClient() {
                         <div className="font-semibold text-gray-900 line-clamp-2 group-hover:text-red-700 transition-colors">
                           {n.title}
                         </div>
-                        <div className="text-xs text-gray-500 mt-1">
-                          {new Date(n.createdAt).toLocaleDateString('ko-KR')}
-                        </div>
+                        {n.createdAt && (
+                          <div className="text-xs text-gray-500 mt-1">
+                            {new Date(n.createdAt).toLocaleDateString('ko-KR')}
+                          </div>
+                        )}
                       </button>
                     ))}
                   </div>
@@ -108,9 +114,11 @@ export default function EmployeeMainClient() {
                         <div className="font-semibold text-gray-900 line-clamp-2 group-hover:text-indigo-700 transition-colors">
                           {m.title}
                         </div>
-                        <div className="text-xs text-gray-500 mt-1">
-                          {new Date(m.updatedAt).toLocaleDateString('ko-KR')}
-                        </div>
+                        {m.updatedAt && (
+                          <div className="text-xs text-gray-500 mt-1">
+                            {new Date(m.updatedAt).toLocaleDateString('ko-KR')}
+                          </div>
+                        )}
                       </button>
                     ))}
                   </div>
@@ -132,9 +140,11 @@ export default function EmployeeMainClient() {
                         <div className="font-semibold text-gray-900 line-clamp-2 group-hover:text-orange-700 transition-colors">
                           {p.title}
                         </div>
-                        <div className="text-xs text-gray-500 mt-1">
-                          {new Date(p.updatedAt).toLocaleDateString('ko-KR')}
-                        </div>
+                        {(p.updatedAt || p.createdAt) && (
+                          <div className="text-xs text-gray-500 mt-1">
+                            {new Date(p.updatedAt || p.createdAt).toLocaleDateString('ko-KR')}
+                          </div>
+                        )}
                       </button>
                     ))}
                   </div>
@@ -156,7 +166,48 @@ export default function EmployeeMainClient() {
                   </div>
                 </div>
                 <div className="text-sm text-gray-600 mb-4">2일 이상 미업데이트 또는 업데이트 기록 없음</div>
-                <EmployeeStaleInventory onSelect={(item: any) => setModal({type: 'inventory', data: item})} />
+                {/* 서버에서 같이 전달된 상위 5개를 우선 표시하여 초기 로딩 단축 */}
+                {feed.inventoryStale && feed.inventoryStale.length > 0 ? (
+                  <div className="space-y-3">
+                    {feed.inventoryStale.map((item: any) => (
+                      <button
+                        key={item.id}
+                        onClick={() => setModal({ type: 'inventory', data: item })}
+                        className="w-full text-left bg-white border border-gray-100 hover:border-teal-200 hover:bg-teal-50/30 rounded-xl p-4 transition-all duration-200 hover:shadow-md group"
+                      >
+                        <div className="flex items-center justify-between gap-3 mb-3">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <span className="text-2xl flex-shrink-0" aria-hidden="true">📦</span>
+                            <div className="min-w-0">
+                              <div className="font-bold text-gray-900 truncate group-hover:text-teal-700 transition-colors">{item.name}</div>
+                              <div className="flex items-center gap-2 mt-1">
+                                <span className="px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-700">{item.category}</span>
+                                {(item.currentStock ?? 0) <= (item.minStock ?? 0) && (
+                                  <span className="px-2 py-1 text-xs font-bold bg-red-500 text-white rounded-full">재고부족</span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="text-right flex-shrink-0">
+                            <div className="text-sm font-bold text-orange-600">최근</div>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4 text-xs">
+                          <div className="bg-gray-50 rounded-lg p-2">
+                            <div className="text-gray-500 mb-1">현재 재고</div>
+                            <div className="font-bold text-gray-900">{item.currentStock} / {item.minStock} {item.unit}</div>
+                          </div>
+                          <div className="bg-gray-50 rounded-lg p-2">
+                            <div className="text-gray-500 mb-1">최근 업데이트</div>
+                            <div className="font-medium text-gray-700">{item.lastUpdated ? new Date(item.lastUpdated).toLocaleDateString('ko-KR') : '-'}</div>
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <EmployeeStaleInventory onSelect={(item: any) => setModal({type: 'inventory', data: item})} />
+                )}
               </div>
             </div>
           </div>

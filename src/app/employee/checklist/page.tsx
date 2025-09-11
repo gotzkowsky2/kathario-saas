@@ -15,6 +15,7 @@ interface ChecklistTemplate {
   isCompleted?: boolean;
   dueTime?: string;
   status?: 'pending' | 'in_progress' | 'completed' | 'overdue';
+  instanceId?: string | null;
 }
 
 
@@ -86,7 +87,11 @@ export default function EmployeeChecklistPage() {
 
 
   const handleChecklistClick = (checklist: ChecklistTemplate) => {
-    router.push(`/employee/checklist/${checklist.id}`);
+    if (checklist.instanceId) {
+      router.push(`/employee/checklist/${checklist.instanceId}`);
+    } else {
+      alert('오늘 생성된 체크리스트 인스턴스가 없습니다.');
+    }
   };
 
   const getStatusColor = (status?: string) => {
@@ -235,6 +240,12 @@ export default function EmployeeChecklistPage() {
                         <span className="px-2 py-1 bg-purple-100 text-purple-700 text-xs rounded-full">
                           {timeSlotOptions.find(opt => opt.value === checklist.timeSlot)?.label || checklist.timeSlot}
                         </span>
+                        {/* 매뉴얼 연결된 주의사항 수 표기 */}
+                        {typeof (checklist as any).manualConnectedPrecautions === 'number' && (checklist as any).manualConnectedPrecautions > 0 && (
+                          <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full">
+                            매뉴얼 { (checklist as any).manualConnectedPrecautions }개
+                          </span>
+                        )}
                         <span className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded-full">
                           {categoryOptions.find(opt => opt.value === checklist.category)?.label || checklist.category}
                         </span>

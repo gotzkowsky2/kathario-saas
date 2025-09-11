@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
 
     // 필터 조건 추가
     if (filters.employeeId) {
-      where.assignedToId = filters.employeeId;
+      where.employeeId = filters.employeeId;
     }
 
     if (filters.templateId) {
@@ -102,46 +102,50 @@ export async function GET(request: NextRequest) {
             name: true,
             workplace: true,
             timeSlot: true,
-            category: true
+            category: true,
           }
         },
-        assignedTo: {
+        employee: {
+          select: { name: true }
+        },
+        checklistItemProgresses: {
           select: {
-            name: true
-          }
-        },
-        completedBy: {
-          select: {
-            name: true
-          }
-        },
-        items: {
-          include: {
-            progress: {
-              include: {
-                connectedItemProgress: true
-              }
+            id: true,
+            isCompleted: true,
+            notes: true,
+            item: {
+              select: { id: true, content: true, instructions: true }
             }
           }
+        },
+        connectedItemsProgress: {
+          select: { id: true, isCompleted: true, notes: true, itemId: true }
         }
       },
       orderBy: { createdAt: 'desc' }
     });
 
+    // 완료자 이름 매핑 (completedBy는 문자열 ID)
+    const completedByIds = Array.from(new Set(
+      instances
+        .map(i => i.completedBy)
+        .filter((v): v is string => typeof v === 'string' && v.length > 0)
+    ));
+    const completedByEmployees = completedByIds.length
+      ? await prisma.employee.findMany({
+          where: { id: { in: completedByIds } },
+          select: { id: true, name: true }
+        })
+      : [];
+    const completedByMap = new Map(completedByEmployees.map(e => [e.id, e.name]));
+
     // 응답 데이터 포맷팅
     const submissions = instances.map(instance => {
-      const totalMainItems = instance.items.length;
-      const completedMainItems = instance.items.filter(item => 
-        item.progress && item.progress.length > 0 && item.progress[0].isCompleted
-      ).length;
+      const totalMainItems = instance.checklistItemProgresses.length;
+      const completedMainItems = instance.checklistItemProgresses.filter(p => p.isCompleted).length;
 
-      const totalConnectedItems = instance.items.reduce((sum, item) => 
-        sum + (item.progress?.[0]?.connectedItemProgress?.length || 0), 0
-      );
-      
-      const completedConnectedItems = instance.items.reduce((sum, item) => 
-        sum + (item.progress?.[0]?.connectedItemProgress?.filter(cp => cp.isCompleted).length || 0), 0
-      );
+      const totalConnectedItems = instance.connectedItemsProgress.length;
+      const completedConnectedItems = instance.connectedItemsProgress.filter(cp => cp.isCompleted).length;
 
       const totalItems = totalMainItems + totalConnectedItems;
       const completedItems = completedMainItems + completedConnectedItems;
@@ -151,8 +155,8 @@ export async function GET(request: NextRequest) {
         date: instance.createdAt.toISOString().split('T')[0],
         templateId: instance.templateId,
         templateName: instance.template.name,
-        employeeId: instance.assignedToId,
-        employeeName: instance.assignedTo?.name || '미지정',
+        employeeId: instance.employeeId || null,
+        employeeName: instance.employee?.name || '미지정',
         workplace: instance.template.workplace,
         timeSlot: instance.template.timeSlot,
         category: instance.template.category,
@@ -160,7 +164,7 @@ export async function GET(request: NextRequest) {
         isSubmitted: !!instance.submittedAt,
         completedAt: instance.completedAt,
         submittedAt: instance.submittedAt,
-        completedBy: instance.completedBy?.name,
+        completedBy: completedByMap.get(instance.completedBy || '') || null,
         progress: {
           totalMainItems,
           mainItems: completedMainItems,
@@ -171,23 +175,21 @@ export async function GET(request: NextRequest) {
           percentage: totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0
         },
         details: {
-          mainItems: instance.items.map(item => ({
-            id: item.id,
-            content: item.content,
-            instructions: item.instructions,
-            isCompleted: item.progress && item.progress.length > 0 ? item.progress[0].isCompleted : false,
-            notes: item.progress && item.progress.length > 0 ? item.progress[0].notes : null
+          mainItems: instance.checklistItemProgresses.map(p => ({
+            id: p.id,
+            content: p.item?.content || '',
+            instructions: p.item?.instructions || undefined,
+            isCompleted: p.isCompleted,
+            notes: p.notes || null,
           })),
-          connectedItems: instance.items.flatMap(item => 
-            item.progress?.[0]?.connectedItemProgress?.map(cp => ({
-              id: cp.id,
-              title: `연결된 항목 ${cp.itemType}`,
-              isCompleted: cp.isCompleted,
-              notes: cp.notes,
-              itemType: cp.itemType,
-              itemId: cp.itemId
-            })) || []
-          )
+          connectedItems: instance.connectedItemsProgress.map(cp => ({
+            id: cp.id,
+            title: '연결된 항목',
+            isCompleted: cp.isCompleted,
+            notes: cp.notes || null,
+            itemType: 'ITEM',
+            itemId: cp.itemId || '',
+          })),
         }
       };
     });

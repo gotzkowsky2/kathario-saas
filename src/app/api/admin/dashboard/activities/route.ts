@@ -34,12 +34,27 @@ export async function GET(request: NextRequest) {
         }
       },
       include: {
-        template: { select: { name: true } },
-        completedBy: { select: { name: true } }
+        template: { select: { name: true } }
       },
       orderBy: { completedAt: 'desc' },
       take: 3
     });
+
+    // 완료자 이름 매핑 (completedBy는 문자열 ID이므로 별도 조회)
+    const completedByIds = Array.from(
+      new Set(
+        completedChecklists
+          .map(c => c.completedBy)
+          .filter((v): v is string => typeof v === 'string' && v.length > 0)
+      )
+    );
+    const completedByEmployees = completedByIds.length
+      ? await prisma.employee.findMany({
+          where: { tenantId, id: { in: completedByIds } },
+          select: { id: true, name: true }
+        })
+      : [];
+    const completedByMap = new Map(completedByEmployees.map(e => [e.id, e.name]));
 
     completedChecklists.forEach(checklist => {
       if (checklist.completedAt) {
@@ -47,11 +62,11 @@ export async function GET(request: NextRequest) {
           id: `checklist_${checklist.id}`,
           type: 'checklist_completed',
           title: `${checklist.template.name} 체크리스트 완료`,
-          description: `${checklist.completedBy?.name || '직원'}님이 ${getTimeAgo(checklist.completedAt)}에 완료했습니다`,
+          description: `${completedByMap.get(checklist.completedBy || '') || '직원'}님이 ${getTimeAgo(checklist.completedAt)}에 완료했습니다`,
           timestamp: checklist.completedAt,
           icon: 'check-circle',
           color: 'green',
-          user: checklist.completedBy?.name
+          user: completedByMap.get(checklist.completedBy || '')
         });
       }
     });
