@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createHash } from 'crypto';
 import prisma from '@/lib/prisma';
 import { parseAuthCookie } from '@/lib/auth';
 
@@ -177,7 +178,24 @@ export async function GET(request: NextRequest) {
       };
     }));
 
-    return NextResponse.json(checklists);
+    // ETag/마이크로캐시
+    try {
+      const bodyString = JSON.stringify(checklists)
+      const etag = 'W/"' + createHash('sha1').update(bodyString).digest('base64') + '"'
+      const inm = request.headers.get('if-none-match')
+      if (inm && inm === etag) {
+        const res304 = new NextResponse(null, { status: 304 })
+        res304.headers.set('ETag', etag)
+        res304.headers.set('Cache-Control', 'public, s-maxage=15, stale-while-revalidate=30, max-age=0')
+        return res304
+      }
+      const res = NextResponse.json(checklists)
+      res.headers.set('ETag', etag)
+      res.headers.set('Cache-Control', 'public, s-maxage=15, stale-while-revalidate=30, max-age=0')
+      return res
+    } catch {
+      return NextResponse.json(checklists)
+    }
   } catch (error: any) {
     console.error('체크리스트 조회 오류:', error);
     return NextResponse.json({ error: error.message || '조회 실패' }, { status: 500 });
