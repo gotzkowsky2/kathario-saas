@@ -562,7 +562,7 @@ function ChecklistNode({ node, depth, onToggle, details, onOpenDetail, onInvento
             </div>
           )}
         </div>
-      </label>
+      </div>
       {Array.isArray(node.children) && node.children.length > 0 && (
         <div className="space-y-2">
           {node.children.map((c: any) => (
