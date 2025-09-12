@@ -389,15 +389,23 @@ export default function EmployeeChecklistRunPage() {
                     </div>
                     <div className="space-y-3">
                       {detailModal.data.precautions.map((p:any)=>(
-                        <div key={p.id} className="bg-red-50 border border-red-200 rounded p-3">
+                        <button
+                          key={p.id}
+                          className="w-full text-left bg-red-50 border border-red-200 rounded p-3 hover:bg-red-100/60 transition-colors"
+                          onClick={(e)=>{
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setDetailModal({ open: true, data: { ...p, itemType: 'precaution' } })
+                          }}
+                        >
                           <div className="font-medium text-red-900 text-sm mb-1">{p.title}</div>
-                          <div className="text-[12px] text-red-800 whitespace-pre-wrap">{p.content}</div>
+                          <div className="text-[12px] text-red-800 whitespace-pre-wrap line-clamp-3">{p.content}</div>
                           {Array.isArray(p.tags)&&p.tags.length>0 && (
                             <div className="mt-2 flex flex-wrap gap-1">
                               {p.tags.map((t:any)=>(<span key={t.id} className="px-2 py-0.5 rounded-full text-white text-[10px]" style={{backgroundColor:t.color}}>{t.name}</span>))}
                             </div>
                           )}
-                        </div>
+                        </button>
                       ))}
                     </div>
                   </div>
