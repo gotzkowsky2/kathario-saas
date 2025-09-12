@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
+import useSWR from 'swr'
 import { useParams, useRouter } from "next/navigation";
 
 interface InstanceInfo {
@@ -109,30 +110,24 @@ export default function EmployeeChecklistRunPage() {
     })
   }
 
+  const fetcher = (url: string) => fetch(url, { credentials: 'include' }).then(r=>{
+    if (!r.ok) return r.json().then((e:any)=>{ throw new Error(e?.error||'로드 실패') })
+    return r.json()
+  })
+
+  const { data, error: swrError, isLoading, mutate } = useSWR(
+    instanceId ? `/api/employee/checklist-progress?instanceId=${instanceId}` : null,
+    fetcher,
+    { revalidateOnFocus: false, dedupingInterval: 15000 }
+  )
+
   const load = async () => {
-    try {
-      setLoading(true);
-      setError("");
-      const res = await fetch(`/api/employee/checklist-progress?instanceId=${instanceId}`, { credentials: "include" });
-      if (!res.ok) {
-        const e = await res.json().catch(() => ({}));
-        throw new Error(e.error || "체크리스트를 불러오지 못했습니다.");
-      }
-      const data = await res.json();
-      setInstance(data.instance);
-      setProgress(data.progress);
-      setItems(data.items || []);
-      setItemsTree(data.itemsTree || []);
-    } catch (e: any) {
-      setError(e.message || "로드 실패");
-    } finally {
-      setLoading(false);
-    }
-  };
+    await mutate()
+  }
 
   useEffect(() => {
     if (!instanceId) return;
-    load();
+    // SWR가 자동 로드함. 별도 호출 없음
   }, [instanceId]);
 
   // 연결항목 상세 사전 로드
@@ -227,7 +222,18 @@ export default function EmployeeChecklistRunPage() {
     }
   };
 
-  if (loading) {
+  useEffect(()=>{
+    if (data) {
+      setInstance(data.instance)
+      setProgress(data.progress)
+      setItems(data.items||[])
+      setItemsTree(data.itemsTree||[])
+    }
+    if (swrError) setError(String(swrError?.message||'로드 실패'))
+    setLoading(isLoading)
+  }, [data, swrError, isLoading])
+
+  if (isLoading) {
     return (
       <div className="min-h-screen bg-gray-50 p-6">
         <div className="max-w-3xl mx-auto">

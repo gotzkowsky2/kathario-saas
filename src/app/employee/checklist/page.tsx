@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
+import useSWR from 'swr'
 import { useRouter } from "next/navigation";
 
 // 타입 정의
@@ -55,9 +56,18 @@ export default function EmployeeChecklistPage() {
   ];
 
   // 데이터 로딩
+  const fetcher = (url: string) => fetch(url, { credentials: 'include' }).then(r=>r.json())
+  const params = new URLSearchParams();
+  if (filters.workplace) params.append('workplace', filters.workplace);
+  if (filters.timeSlot) params.append('timeSlot', filters.timeSlot);
+  if (filters.category) params.append('category', filters.category);
+  const { data, error: swrError, isLoading, mutate } = useSWR(`/api/employee/checklists?${params}`, fetcher, { revalidateOnFocus: false, dedupingInterval: 15000 })
+
   useEffect(() => {
-    fetchChecklists();
-  }, [filters]);
+    if (data) setChecklists(data)
+    if (swrError) setError('체크리스트를 불러오는데 실패했습니다.')
+    setLoading(isLoading)
+  }, [data, swrError, isLoading])
 
   const fetchChecklists = async () => {
     try {
@@ -197,7 +207,7 @@ export default function EmployeeChecklistPage() {
 
         {/* 체크리스트 목록 */}
         <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-white/20 p-4 sm:p-6">
-          {loading ? (
+          {isLoading ? (
             <div className="space-y-4">
               {[1, 2, 3].map(i => (
                 <div key={i} className="animate-pulse bg-gray-100 rounded-xl p-6 h-32"></div>
