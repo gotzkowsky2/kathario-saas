@@ -2,6 +2,7 @@
 import Link from "next/link";
 import React from "react";
 import { useEffect, useState } from "react";
+import useSWR from 'swr'
 import EmployeeStaleInventory from "./EmployeeStaleInventory";
 
 type Feed = { notices: any[]; updatedManuals: any[]; newPrecautions: any[]; inventoryStale?: any[] };
@@ -11,23 +12,12 @@ export default function EmployeeMainClient() {
   const [loading, setLoading] = useState(true);
   const didFetchRef = React.useRef(false);
   
-  useEffect(() => { 
-    if (didFetchRef.current) return;
-    didFetchRef.current = true;
-    (async () => {
-      try {
-        const r = await fetch('/api/employee/feed', { credentials: 'include' });
-        if (r.ok) {
-          const data = await r.json();
-          setFeed(data);
-        }
-      } catch (error) {
-        console.error('피드 로딩 실패:', error);
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
+  const fetcher = (url: string) => fetch(url, { credentials: 'include' }).then(r=>r.json())
+  const { data, isLoading } = useSWR('/api/employee/feed', fetcher, { revalidateOnFocus: false, dedupingInterval: 15000 })
+  useEffect(()=>{
+    if (data) setFeed(data)
+    setLoading(isLoading)
+  }, [data, isLoading])
 
   const [modal, setModal] = useState<null | { type: 'notice'|'manual'|'precaution'|'inventory', data: any }>(null);
 
