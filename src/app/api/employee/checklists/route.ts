@@ -70,20 +70,10 @@ export async function GET(request: NextRequest) {
         },
         instances: {
           where: {
-            OR: [
-              {
-                date: {
-                  gte: today,
-                  lt: tomorrow
-                }
-              },
-              {
-                createdAt: {
-                  gte: today,
-                  lt: tomorrow
-                }
-              }
-            ]
+            date: {
+              gte: today,
+              lt: tomorrow
+            }
           },
           include: {
             checklistItemProgresses: { where: { isCompleted: true }, select: { id: true, itemId: true } },
@@ -189,9 +179,12 @@ export async function GET(request: NextRequest) {
       };
     }));
 
+    // 오늘 인스턴스가 있는 템플릿만 노출
+    const filtered = checklists.filter((c: any) => !!c.instanceId)
+
     // ETag/마이크로캐시
     try {
-      const bodyString = JSON.stringify(checklists)
+      const bodyString = JSON.stringify(filtered)
       const etag = 'W/"' + createHash('sha1').update(bodyString).digest('base64') + '"'
       const inm = request.headers.get('if-none-match')
       if (inm && inm === etag) {
@@ -200,12 +193,12 @@ export async function GET(request: NextRequest) {
         res304.headers.set('Cache-Control', 'public, s-maxage=15, stale-while-revalidate=30, max-age=0')
         return res304
       }
-      const res = NextResponse.json(checklists)
+      const res = NextResponse.json(filtered)
       res.headers.set('ETag', etag)
       res.headers.set('Cache-Control', 'public, s-maxage=15, stale-while-revalidate=30, max-age=0')
       return res
     } catch {
-      return NextResponse.json(checklists)
+      return NextResponse.json(filtered)
     }
   } catch (error: any) {
     console.error('체크리스트 조회 오류:', error);

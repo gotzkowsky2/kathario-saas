@@ -224,14 +224,14 @@ export default function EmployeeChecklistRunPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ instanceId })
       });
+      const json = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const e = await res.json().catch(() => ({}));
-        throw new Error(e.error || '제출 실패');
+        throw new Error('제출 실패');
       }
-      alert('제출 완료되었습니다.');
+      alert(`제출 완료되었습니다.`);
       router.push('/employee/checklist');
     } catch (e: any) {
-      alert(e.message || '제출 실패');
+      alert('제출 실패');
     } finally {
       setSubmitting(false);
     }
@@ -345,10 +345,10 @@ export default function EmployeeChecklistRunPage() {
           <div className="flex items-center justify-end gap-3 mt-5">
             <button
               onClick={submitChecklist}
-              disabled={!allDone || submitting || instance.isSubmitted}
-              className={`px-4 py-2 rounded-lg text-white ${(!allDone || submitting || instance.isSubmitted) ? 'bg-gray-400' : 'bg-green-600 hover:bg-green-700'} transition-colors`}
+              disabled={!allDone || submitting}
+              className={`px-4 py-2 rounded-lg text-white ${(!allDone || submitting) ? 'bg-gray-400' : 'bg-green-600 hover:bg-green-700'} transition-colors`}
             >
-              {instance.isSubmitted ? '이미 제출됨' : (submitting ? '제출 중...' : '제출하기')}
+              {instance.isSubmitted ? (submitting ? '재제출 중...' : '재제출하기') : (submitting ? '제출 중...' : '제출하기')}
             </button>
           </div>
         </div>
