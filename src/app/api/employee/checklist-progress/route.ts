@@ -38,42 +38,60 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'instanceId가 필요합니다.' }, { status: 400 })
     }
 
+    const useV2 = (searchParams.get('v2') === '1')
     const instance = await prisma.checklistInstance.findUnique({
       where: { id: instanceId },
-      include: {
-        template: {
-          select: {
-            id: true, name: true, workplace: true, timeSlot: true, category: true,
-            items: {
-              include: {
-                connectedItems: true,
-                children: {
+      include: useV2
+        ? {
+            template: { select: { id: true, name: true, workplace: true, timeSlot: true, category: true } },
+            checklistItemProgresses: {
+              select: {
+                id: true,
+                itemId: true,
+                isCompleted: true,
+                notes: true,
+                completedBy: true,
+                completedAt: true,
+                item: { select: { id: true, content: true, instructions: true, order: true, parentId: true } }
+              },
+              orderBy: { item: { order: 'asc' } }
+            },
+            connectedItemsProgress: { select: { id: true, itemId: true, isCompleted: true, notes: true, connectionId: true, completedBy: true, completedAt: true } }
+          }
+        : {
+            template: {
+              select: {
+                id: true, name: true, workplace: true, timeSlot: true, category: true,
+                items: {
                   include: {
                     connectedItems: true,
                     children: {
-                      include: { connectedItems: true }
+                      include: {
+                        connectedItems: true,
+                        children: {
+                          include: { connectedItems: true }
+                        }
+                      }
                     }
-                  }
+                  },
+                  orderBy: { order: 'asc' }
                 }
+              }
+            },
+            checklistItemProgresses: {
+              select: {
+                id: true,
+                itemId: true,
+                isCompleted: true,
+                notes: true,
+                completedBy: true,
+                completedAt: true,
+                item: { select: { id: true, content: true, instructions: true, order: true, parentId: true } }
               },
-              orderBy: { order: 'asc' }
-            }
+              orderBy: { item: { order: 'asc' } }
+            },
+            connectedItemsProgress: { select: { id: true, itemId: true, isCompleted: true, notes: true, connectionId: true, completedBy: true, completedAt: true } }
           }
-        },
-        checklistItemProgresses: {
-          select: {
-            id: true,
-            itemId: true,
-            isCompleted: true,
-            notes: true,
-            completedBy: true,
-            completedAt: true,
-            item: { select: { id: true, content: true, instructions: true, order: true, parentId: true } }
-          },
-          orderBy: { item: { order: 'asc' } }
-        },
-        connectedItemsProgress: { select: { id: true, itemId: true, isCompleted: true, notes: true, connectionId: true, completedBy: true, completedAt: true } }
-      }
     })
 
     if (!instance || instance.tenantId !== employee.tenantId) {
@@ -98,6 +116,160 @@ export async function GET(request: NextRequest) {
       idToName = Object.fromEntries(employees.map((e) => [e.id, e.name]))
     }
 
+    // V2: O(N) 트리 구성 경로
+    if (useV2) {
+      const hasProgress = instance.checklistItemProgresses.length > 0
+      // 평면 아이템 조회
+      const flatItems = await prisma.checklistItem.findMany({
+        where: { templateId: instance.templateId, isActive: true },
+        select: { id: true, content: true, instructions: true, parentId: true, order: true }
+      })
+      const itemIds = flatItems.map(i => i.id)
+      // 연결항목 일괄 조회
+      const flatConns = await prisma.checklistItemConnection.findMany({
+        where: { checklistItemId: { in: itemIds } },
+        select: { id: true, checklistItemId: true, itemType: true, itemId: true, order: true }
+      })
+
+      // 진행률 누적 변수
+      let totalMain = 0
+      let completedMain = 0
+      let totalConnected = 0
+      let completedConnected = 0
+
+      // 맵 구성
+      const childrenByParent = new Map<string, any[]>()
+      const connsByItem = new Map<string, any[]>()
+      for (const it of flatItems) {
+        if (it.parentId) {
+          const arr = childrenByParent.get(it.parentId) || []
+          arr.push(it)
+          childrenByParent.set(it.parentId, arr)
+        }
+      }
+      for (const c of flatConns) {
+        const arr = connsByItem.get(c.checklistItemId) || []
+        arr.push(c)
+        connsByItem.set(c.checklistItemId, arr)
+      }
+
+      // 프로그레스 맵
+      const progressMap = new Map<string, { isCompleted: boolean; notes: string | null; completedBy: string | null; completedAt: Date | null }>()
+      for (const p of instance.checklistItemProgresses as any[]) {
+        const name = (p.completedBy && idToName[p.completedBy]) ? idToName[p.completedBy] : (p.completedBy || null)
+        progressMap.set(p.itemId, { isCompleted: p.isCompleted, notes: p.notes || null, completedBy: name, completedAt: p.completedAt || null })
+      }
+      const connectedProg = new Map<string, { isCompleted: boolean; notes: string | null; completedBy: string | null; completedAt: Date | null }>()
+      for (const cp of instance.connectedItemsProgress as any[]) {
+        if (cp.connectionId) {
+          const name = (cp.completedBy && idToName[cp.completedBy]) ? idToName[cp.completedBy] : (cp.completedBy || null)
+          connectedProg.set(cp.connectionId, { isCompleted: cp.isCompleted, notes: cp.notes || null, completedBy: name, completedAt: cp.completedAt || null })
+        }
+      }
+
+      const buildNode = (it: any): any => {
+        const prog = progressMap.get(it.id)
+        const rawConns = connsByItem.get(it.id) || []
+        const connections = rawConns.map((c: any) => ({
+          connectionId: c.id,
+          itemType: c.itemType,
+          itemId: c.itemId,
+          isCompleted: connectedProg.get(c.id)?.isCompleted || false,
+          notes: connectedProg.get(c.id)?.notes || null,
+          completedBy: connectedProg.get(c.id)?.completedBy || null,
+          completedAt: connectedProg.get(c.id)?.completedAt || null,
+        }))
+        const rawChildren = childrenByParent.get(it.id) || []
+        const children = rawChildren.map((ch: any) => buildNode(ch))
+
+        const derivedCompletedFromConnections = (prog ? prog.isCompleted : undefined) === undefined && connections.length > 0
+          ? connections.every((c: any) => !!c.isCompleted)
+          : undefined
+        const derivedCompletedFromChildren = children.length > 0
+          ? children.every((ch: any) => !!ch.isCompleted)
+          : undefined
+        const isCompleted = prog?.isCompleted
+          ?? derivedCompletedFromConnections
+          ?? derivedCompletedFromChildren
+          ?? false
+
+        // 누적: 연결항목은 모두 집계
+        totalConnected += connections.length
+        completedConnected += connections.filter((c:any)=>c.isCompleted).length
+        // 메인은 리프만 집계
+        const isLeafMain = (children.length === 0) && (connections.length === 0)
+        if (isLeafMain) {
+          totalMain += 1
+          if (isCompleted) completedMain += 1
+        }
+
+        return {
+          id: it.id,
+          content: it.content,
+          instructions: it.instructions || undefined,
+          isCompleted,
+          notes: prog ? prog.notes : null,
+          completedBy: prog ? (prog as any).completedBy : null,
+          completedAt: prog ? (prog as any).completedAt : null,
+          connections,
+          children
+        }
+      }
+
+      const roots = flatItems.filter((i: any) => !i.parentId).sort((a:any,b:any)=> (a.order??0)-(b.order??0))
+      const itemsTree = roots.map((r: any) => buildNode(r))
+
+      const response = {
+        instance: {
+          id: instance.id,
+          templateId: instance.templateId,
+          templateName: (instance.template as any).name,
+          date: instance.date,
+          workplace: instance.workplace,
+          timeSlot: instance.timeSlot,
+          isSubmitted: instance.isSubmitted,
+          isCompleted: instance.isCompleted,
+        },
+        progress: {
+          totalMain,
+          completedMain,
+          totalConnected,
+          completedConnected,
+          percentage: (totalMain + totalConnected) > 0 ? Math.round(((completedMain + completedConnected) / (totalMain + totalConnected)) * 100) : 0
+        },
+        items: (hasProgress
+          ? instance.checklistItemProgresses.map(p => ({
+              id: (p as any).item?.id || p.itemId,
+              content: (p as any).item?.content || '',
+              instructions: (p as any).item?.instructions || undefined,
+              isCompleted: p.isCompleted,
+              notes: p.notes || null,
+              completedBy: (p.completedBy && idToName[p.completedBy]) ? idToName[p.completedBy] : (p.completedBy || null),
+              completedAt: p.completedAt || null,
+              parentId: ((p as any).item as any)?.parentId || null,
+              hasChildren: (childrenByParent.get(((p as any).item as any)?.id || '') || []).length > 0,
+            }))
+          : flatItems
+              .map(i => ({
+                id: i.id,
+                content: i.content,
+                instructions: i.instructions || undefined,
+                isCompleted: false,
+                notes: null,
+                completedBy: null,
+                completedAt: null,
+                parentId: i.parentId || null,
+                hasChildren: (childrenByParent.get(i.id) || []).length > 0,
+              }))
+        ),
+        itemsTree,
+        connectedItems: instance.connectedItemsProgress
+      }
+
+      return NextResponse.json(response)
+    }
+
+    // V1: 기존 경로(중첩 include 기반)
     const templateItems = (instance.template as any).items as Array<any>
     const hasProgress = instance.checklistItemProgresses.length > 0
 
