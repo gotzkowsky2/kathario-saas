@@ -158,6 +158,21 @@ export default function EmployeeChecklistRunPage() {
     if (itemsTree && itemsTree.length) fetchAll();
   }, [itemsTree]);
 
+  // 상세 정보 on-demand 로드(최초 클릭 시에도 동작하도록 보조)
+  const fetchDetail = async (type: string, id: string) => {
+    const key = `${type}_${id}`
+    if (connectedDetails[key]) return connectedDetails[key]
+    try {
+      const res = await fetch(`/api/employee/connected-items?type=${type}&id=${id}`, { credentials: 'include' })
+      if (!res.ok) return null
+      const data = await res.json()
+      setConnectedDetails(prev => ({ ...prev, [key]: data }))
+      return data
+    } catch {
+      return null
+    }
+  }
+
   const toggleItem = async (itemId: string, next: boolean) => {
     // 1) 로컬 즉시 반영(깜빡임 방지)
     setItems(prev => prev.map(i => i.id === itemId ? { ...i, isCompleted: next } : i));
@@ -399,17 +414,17 @@ export default function EmployeeChecklistRunPage() {
   );
 }
 
-function ChecklistTree({ nodes, onToggle, details, onOpenDetail, onInventoryUpdate, instanceId, reload, updateConnection, updateProgressConnected }: { nodes: any[]; onToggle: (id: string, next: boolean) => void; details: any; onOpenDetail: (data:any)=>void; onInventoryUpdate: (itemId:string, connectionId:string, value:number)=>void; instanceId: string; reload: ()=>Promise<void>; updateConnection: (connectionId: string, next: boolean)=>void; updateProgressConnected: (delta:number)=>void }) {
+function ChecklistTree({ nodes, onToggle, details, onOpenDetail, onInventoryUpdate, instanceId, reload, updateConnection, updateProgressConnected, fetchDetail }: { nodes: any[]; onToggle: (id: string, next: boolean) => void; details: any; onOpenDetail: (data:any)=>void; onInventoryUpdate: (itemId:string, connectionId:string, value:number)=>void; instanceId: string; reload: ()=>Promise<void>; updateConnection: (connectionId: string, next: boolean)=>void; updateProgressConnected: (delta:number)=>void; fetchDetail: (type:string, id:string)=>Promise<any|null> }) {
   return (
     <div className="space-y-2">
       {nodes.map((n) => (
-        <ChecklistNode key={n.id} node={n} depth={0} onToggle={onToggle} details={details} onOpenDetail={onOpenDetail} onInventoryUpdate={onInventoryUpdate} instanceId={instanceId} reload={reload} updateConnection={updateConnection} updateProgressConnected={updateProgressConnected} />
+        <ChecklistNode key={n.id} node={n} depth={0} onToggle={onToggle} details={details} onOpenDetail={onOpenDetail} onInventoryUpdate={onInventoryUpdate} instanceId={instanceId} reload={reload} updateConnection={updateConnection} updateProgressConnected={updateProgressConnected} fetchDetail={fetchDetail} />
       ))}
     </div>
   )
 }
 
-function ChecklistNode({ node, depth, onToggle, details, onOpenDetail, onInventoryUpdate, instanceId, reload, updateConnection, updateProgressConnected }: { node: any; depth: number; onToggle: (id: string, next: boolean) => void; details: any; onOpenDetail: (data:any)=>void; onInventoryUpdate: (itemId:string, connectionId:string, value:number)=>void; instanceId: string; reload: ()=>Promise<void>; updateConnection: (connectionId: string, next: boolean)=>void; updateProgressConnected: (delta:number)=>void }) {
+function ChecklistNode({ node, depth, onToggle, details, onOpenDetail, onInventoryUpdate, instanceId, reload, updateConnection, updateProgressConnected, fetchDetail }: { node: any; depth: number; onToggle: (id: string, next: boolean) => void; details: any; onOpenDetail: (data:any)=>void; onInventoryUpdate: (itemId:string, connectionId:string, value:number)=>void; instanceId: string; reload: ()=>Promise<void>; updateConnection: (connectionId: string, next: boolean)=>void; updateProgressConnected: (delta:number)=>void; fetchDetail: (type:string, id:string)=>Promise<any|null> }) {
   const indent = (typeof window !== 'undefined' && window.innerWidth <= 360) ? 10 : (typeof window !== 'undefined' && window.innerWidth <= 640 ? 14 : 18)
   return (
     <div className="space-y-2 w-full">
@@ -500,16 +515,24 @@ function ChecklistNode({ node, depth, onToggle, details, onOpenDetail, onInvento
                         </div>
                       )}
 
-                      {c.itemType !== 'inventory' && d && (
+                      {c.itemType !== 'inventory' && (
                         <div className={`mt-2 pl-5 ${c.itemType==='precaution' ? 'bg-orange-50 border border-orange-200 rounded p-2' : 'bg-green-50 border border-green-200 rounded p-2'}`}>
                           <div 
                             className="text-[12px] sm:text-sm text-gray-700 whitespace-pre-wrap break-words cursor-pointer"
-                            onClick={()=>onOpenDetail({ ...d, itemType: c.itemType })}
+                            onClick={async (e)=>{
+                              e.preventDefault();
+                              e.stopPropagation();
+                              let detail = d
+                              if (!detail) {
+                                detail = await fetchDetail(c.itemType, c.itemId)
+                              }
+                              if (detail) onOpenDetail({ ...detail, itemType: c.itemType })
+                            }}
                           >
-                            {(d.content||'').slice(0,150)}{(d.content||'').length>150?'...':''}
+                            {((d?.content)||'').slice(0,150)}{(((d?.content)||'').length>150)?'...':''}
                           </div>
-                          {c.itemType==='manual' && Array.isArray(d.precautions) && (
-                            <div className="mt-1 text-[11px] text-green-700">연결주의 {d.precautions.length}개</div>
+                          {c.itemType==='manual' && Array.isArray(d?.precautions) && (
+                            <div className="mt-1 text-[11px] text-green-700">연결주의 {d?.precautions.length}개</div>
                           )}
                           <div className="text-[11px] mt-1 text-gray-600">{c.itemType==='precaution' ? '주의사항을 확인하고 체크해주세요' : '매뉴얼을 확인하고 체크해주세요'}</div>
                           {c.completedBy && (
