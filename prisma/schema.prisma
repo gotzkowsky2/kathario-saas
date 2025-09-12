@@ -421,7 +421,6 @@ model Manual {
   tenant              Tenant                     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   precautionRelations ManualPrecautionRelation[]
   tagRelations        ManualTagRelation[]
-  precautions         Precaution[]               @relation("ManualPrecautions")
   tags                Tag[]                      @relation("ManualTags")
   
   @@index([tenantId, isActive])
@@ -444,7 +443,6 @@ model Precaution {
   tenant          Tenant                     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   manualRelations ManualPrecautionRelation[]
   tagRelations    PrecautionTagRelation[]
-  manuals         Manual[]                   @relation("ManualPrecautions")
   tags            Tag[]                      @relation("PrecautionTags")
   
   @@index([tenantId, isActive])
