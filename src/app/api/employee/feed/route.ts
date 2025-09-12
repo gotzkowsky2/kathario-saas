@@ -68,7 +68,6 @@ export async function GET(request: NextRequest) {
         select: { 
           id: true, 
           title: true, 
-          content: true,
           updatedAt: true 
         },
         orderBy: { updatedAt: 'desc' },
@@ -86,7 +85,6 @@ export async function GET(request: NextRequest) {
         select: { 
           id: true, 
           title: true, 
-          content: true, 
           priority: true, 
           updatedAt: true, 
           createdAt: true 
@@ -122,16 +120,33 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    const res = NextResponse.json({
+    const payload = {
       notices,
       updatedManuals: manuals,
       newPrecautions: precautions,
       inventoryStale,
       metadata: { cutoffDate: sevenDaysAgo.toISOString() }
-    })
-    // 초단기 캐시: 15초 (프록시 캐시 대상, 브라우저는 no-store 유지)
-    res.headers.set('Cache-Control', 'public, s-maxage=15, stale-while-revalidate=30')
-    return res
+    }
+    // ETag + 초단기 캐시
+    try {
+      const body = JSON.stringify(payload)
+      const etag = 'W/"' + require('crypto').createHash('sha1').update(body).digest('base64') + '"'
+      const inm = request.headers.get('if-none-match')
+      if (inm && inm === etag) {
+        const res304 = new NextResponse(null, { status: 304 })
+        res304.headers.set('ETag', etag)
+        res304.headers.set('Cache-Control', 'public, s-maxage=15, stale-while-revalidate=30, max-age=0')
+        return res304
+      }
+      const res = NextResponse.json(payload)
+      res.headers.set('ETag', etag)
+      res.headers.set('Cache-Control', 'public, s-maxage=15, stale-while-revalidate=30, max-age=0')
+      return res
+    } catch {
+      const res = NextResponse.json(payload)
+      res.headers.set('Cache-Control', 'public, s-maxage=15, stale-while-revalidate=30, max-age=0')
+      return res
+    }
   } catch (e: any) {
     console.error('피드 조회 오류:', e);
     return NextResponse.json({ error: e.message || '조회 실패' }, { status: 500 });
