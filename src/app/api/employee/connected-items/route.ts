@@ -67,7 +67,20 @@ export async function GET(request: NextRequest) {
           category: true,
           createdAt: true,
           tags: { select: { id: true, name: true, color: true } },
-          precautions: {
+        }
+      })
+      if (!man) return NextResponse.json({ error: '메뉴얼을 찾을 수 없습니다.' }, { status: 404 })
+
+      // 주의사항은 명시적 조인 테이블(ManualPrecautionRelation) 기준으로 수집한다
+      const rels = await prisma.manualPrecautionRelation.findMany({
+        where: {
+          manualId: id,
+          manual: { tenantId },
+          precaution: { tenantId }
+        },
+        select: {
+          order: true,
+          precaution: {
             select: {
               id: true,
               title: true,
@@ -77,13 +90,24 @@ export async function GET(request: NextRequest) {
               priority: true,
               createdAt: true,
               tags: { select: { id: true, name: true, color: true } }
-            },
-            orderBy: { createdAt: 'desc' }
+            }
           }
-        }
+        },
+        orderBy: { order: 'asc' }
       })
-      if (!man) return NextResponse.json({ error: '메뉴얼을 찾을 수 없습니다.' }, { status: 404 })
-      return NextResponse.json(man)
+
+      const precautions = rels.map((r:any)=>({
+        id: r.precaution.id,
+        title: r.precaution.title,
+        content: r.precaution.content,
+        workplace: r.precaution.workplace,
+        timeSlot: r.precaution.timeSlot,
+        priority: r.precaution.priority,
+        createdAt: r.precaution.createdAt,
+        tags: r.precaution.tags
+      }))
+
+      return NextResponse.json({ ...man, precautions })
     }
 
     return NextResponse.json({ error: '지원하지 않는 타입입니다.' }, { status: 400 })
