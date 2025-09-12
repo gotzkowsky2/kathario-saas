@@ -320,8 +320,7 @@ export async function GET(request: NextRequest) {
               hasChildren: Array.isArray((i as any).children) && (i as any).children.length > 0,
             }))
       ),
-      itemsTree: [] as any[],
-      connectedItems: instance.connectedItemsProgress
+      itemsTree: [] as any[]
     }
 
     // 트리 생성(누적 집계 포함)
