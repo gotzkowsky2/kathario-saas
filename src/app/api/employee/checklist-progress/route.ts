@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'instanceId가 필요합니다.' }, { status: 400 })
     }
 
-    const useV2 = (searchParams.get('v2') === '1')
+    const useV2 = (searchParams.get('v2') === '1') || (process.env.CHECKLIST_V2 === 'true')
     const instance = await prisma.checklistInstance.findUnique({
       where: { id: instanceId },
       include: useV2
