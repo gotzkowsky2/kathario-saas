@@ -112,7 +112,7 @@ export async function GET(request: NextRequest) {
       // 2) 연결항목 일괄 조회(카운트용)
       const flatConns = await prisma.checklistItemConnection.findMany({
         where: { checklistItemId: { in: itemIds } },
-        select: { id: true, checklistItemId: true }
+        select: { id: true, checklistItemId: true, itemType: true, itemId: true }
       })
       // 3) children map
       const hasChild = new Set<string>()
@@ -135,9 +135,11 @@ export async function GET(request: NextRequest) {
       const completedConnected = instance ? (instance.connectedItemsProgress?.length || 0) : 0
       // 매뉴얼에 연결된 주의사항 총합(배지용)
       // 주의: 자식 항목의 연결까지 포함하기 위해 flatConns를 사용한다
-      const manualIds = flatConns
-        .filter((c:any)=>c && c.checklistItemId && c.itemType==='manual')
-        .map((c:any)=>c.itemId)
+      const manualIds = Array.from(new Set(
+        flatConns
+          .filter((c:any)=>c && c.checklistItemId && c.itemType==='manual')
+          .map((c:any)=>c.itemId)
+      ))
       let manualConnectedPrecautions = 0
       if (manualIds.length > 0) {
         const rels = await prisma.manualPrecautionRelation.findMany({
