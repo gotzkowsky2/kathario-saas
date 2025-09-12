@@ -134,9 +134,10 @@ export async function GET(request: NextRequest) {
       const completedMain = instance ? ((instance.checklistItemProgresses||[]).filter((p:any)=> leafItemIds.includes(p.itemId)).length) : 0
       const completedConnected = instance ? (instance.connectedItemsProgress?.length || 0) : 0
       // 매뉴얼에 연결된 주의사항 총합(배지용)
-      const manualIds = templateItems.flatMap((it:any)=> (it.connectedItems||[])
-        .filter((c:any)=>c.itemType==='manual')
-        .map((c:any)=>c.itemId))
+      // 주의: 자식 항목의 연결까지 포함하기 위해 flatConns를 사용한다
+      const manualIds = flatConns
+        .filter((c:any)=>c && c.checklistItemId && c.itemType==='manual')
+        .map((c:any)=>c.itemId)
       let manualConnectedPrecautions = 0
       if (manualIds.length > 0) {
         const rels = await prisma.manualPrecautionRelation.findMany({
