@@ -137,8 +137,8 @@ export async function GET(request: NextRequest) {
       // 주의: 자식 항목의 연결까지 포함하기 위해 flatConns를 사용한다
       const manualIds = Array.from(new Set(
         flatConns
-          .filter((c:any)=>c && c.checklistItemId && c.itemType==='manual')
-          .map((c:any)=>c.itemId)
+          .filter((c:any)=> c && c.itemId && String(c.itemType||'').toLowerCase() === 'manual')
+          .map((c:any)=> c.itemId)
       ))
       let manualConnectedPrecautions = 0
       if (manualIds.length > 0) {
@@ -151,6 +151,14 @@ export async function GET(request: NextRequest) {
           select: { manualId: true }
         })
         manualConnectedPrecautions = rels.length
+        // 추가 확인: 관계 조회가 0이면 수동 카운트로 재확인
+        if (manualConnectedPrecautions === 0) {
+          const manualCounts = await prisma.manual.findMany({
+            where: { id: { in: manualIds }, tenantId: employee.tenantId },
+            select: { id: true, _count: { select: { precautionRelations: true } } }
+          })
+          manualConnectedPrecautions = manualCounts.reduce((sum, m:any)=> sum + (m._count?.precautionRelations||0), 0)
+        }
       }
       const completedCount = completedMain + completedConnected;
       const totalProgress = itemCount > 0 ? Math.round((completedCount / itemCount) * 100) : 0;
