@@ -113,7 +113,7 @@ export default function EmployeeChecklistRunPage() {
     try {
       setLoading(true);
       setError("");
-      const res = await fetch(`/api/employee/checklist-progress?instanceId=${instanceId}`, { credentials: "include", cache: "no-store" });
+      const res = await fetch(`/api/employee/checklist-progress?instanceId=${instanceId}`, { credentials: "include" });
       if (!res.ok) {
         const e = await res.json().catch(() => ({}));
         throw new Error(e.error || "체크리스트를 불러오지 못했습니다.");
