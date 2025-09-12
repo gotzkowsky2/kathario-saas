@@ -85,7 +85,7 @@ export async function GET(request: NextRequest) {
             ]
           },
           include: {
-            checklistItemProgresses: { where: { isCompleted: true }, select: { id: true } },
+            checklistItemProgresses: { where: { isCompleted: true }, select: { id: true, itemId: true } },
             connectedItemsProgress: { where: { isCompleted: true }, select: { id: true } },
           }
         }
@@ -101,14 +101,37 @@ export async function GET(request: NextRequest) {
     const checklists = await Promise.all(templates.map(async (template) => {
       const instance = (template as any).instances[0]; // 오늘의 인스턴스
       const templateItems = (template as any).items as Array<any>;
-      // 합산 기준: 상위 항목(템플릿의 실 항목 수) + 모든 연결항목 개수
-      const totalMain = templateItems.length;
-      const totalConnected = templateItems.reduce((sum, it) => sum + ((it.connectedItems||[]).length), 0);
-      const itemCount = totalMain + totalConnected;
+      // V2 규칙과 일치: 메인은 리프(자식 X, 연결 X)만 카운트. 연결항목은 전부 카운트
+      // 1) 템플릿의 모든 활성 아이템 평면 조회
+      const flatItems = await prisma.checklistItem.findMany({
+        where: { templateId: template.id, isActive: true },
+        select: { id: true, parentId: true }
+      })
+      const itemIds = flatItems.map(i => i.id)
+      // 2) 연결항목 일괄 조회(카운트용)
+      const flatConns = await prisma.checklistItemConnection.findMany({
+        where: { checklistItemId: { in: itemIds } },
+        select: { id: true, checklistItemId: true }
+      })
+      // 3) children map
+      const hasChild = new Set<string>()
+      for (const it of flatItems) {
+        if (it.parentId) hasChild.add(it.parentId)
+      }
+      // 4) connections map
+      const connCountByItem: Record<string, number> = {}
+      for (const c of flatConns) {
+        connCountByItem[c.checklistItemId] = (connCountByItem[c.checklistItemId] || 0) + 1
+      }
+      // 5) leaf 메인 개수(자식 X, 연결 X)
+      const leafItemIds = flatItems.filter(i => !hasChild.has(i.id) && !(connCountByItem[i.id] > 0)).map(i => i.id)
+      const totalMain = leafItemIds.length
+      const totalConnected = flatConns.length
+      const itemCount = totalMain + totalConnected
 
-      // 완료 수: 메인 완료 + 연결항목 완료
-      const completedMain = instance ? (instance.checklistItemProgresses?.length || 0) : 0;
-      const completedConnected = instance ? (instance.connectedItemsProgress?.length || 0) : 0;
+      // 완료 수: 리프 메인 완료 + 연결항목 완료
+      const completedMain = instance ? ((instance.checklistItemProgresses||[]).filter((p:any)=> leafItemIds.includes(p.itemId)).length) : 0
+      const completedConnected = instance ? (instance.connectedItemsProgress?.length || 0) : 0
       // 매뉴얼에 연결된 주의사항 총합(배지용)
       const manualIds = templateItems.flatMap((it:any)=> (it.connectedItems||[])
         .filter((c:any)=>c.itemType==='manual')
