@@ -102,8 +102,10 @@ export async function GET(request: NextRequest) {
     const hasProgress = instance.checklistItemProgresses.length > 0
 
     // 진행률 누적 변수 (트리 계산 중 갱신)
-    let totalMain = templateItems.filter(i => (i as any).isActive !== false).length
-    let completedMain = hasProgress ? instance.checklistItemProgresses.filter(p => p.isCompleted).length : 0
+    // 규칙: 메인 항목은 "리프 노드(자식/연결항목이 없는 항목)"만 집계한다.
+    // 부모 항목은 자식/연결항목의 완료로 파생 완료되더라도 메인 합계에는 포함하지 않는다.
+    let totalMain = 0
+    let completedMain = 0
     let totalConnected = 0
     let completedConnected = 0
 
@@ -195,7 +197,12 @@ export async function GET(request: NextRequest) {
       // 진행률 누적
       totalConnected += connections.length
       completedConnected += connections.filter((c:any)=>c.isCompleted).length
-      if (isCompleted) completedMain += 1
+      // 메인 항목은 리프 노드만 카운트 (자식/연결항목이 없는 경우)
+      const isLeafMain = (children.length === 0) && (connections.length === 0)
+      if (isLeafMain) {
+        totalMain += 1
+        if (isCompleted) completedMain += 1
+      }
 
       return {
         id: it.id,
