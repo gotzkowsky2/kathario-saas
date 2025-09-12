@@ -29,7 +29,8 @@ async function getCurrentEmployee(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const employee = await getCurrentEmployee(request)
-    const { instanceId, notes } = await request.json()
+    const body = await request.json()
+    const { instanceId, notes, requireConnectedComplete } = body || {}
     if (!instanceId) {
       return NextResponse.json({ error: 'instanceId가 필요합니다.' }, { status: 400 })
     }
@@ -49,6 +50,20 @@ export async function POST(request: NextRequest) {
     const done = counts.find(r => r.isCompleted)?._count._all || 0
     if (total === 0 || done < total) {
       return NextResponse.json({ error: '모든 항목을 완료해야 제출할 수 있습니다.' }, { status: 400 })
+    }
+
+    // 옵션: 연결항목까지 모두 완료 강제
+    if (requireConnectedComplete) {
+      const connCounts = await prisma.connectedItemProgress.groupBy({
+        by: ['isCompleted'],
+        where: { instanceId },
+        _count: { _all: true }
+      })
+      const connTotal = connCounts.reduce((s, r) => s + r._count._all, 0)
+      const connDone = connCounts.find(r => r.isCompleted)?._count._all || 0
+      if (connTotal > 0 && connDone < connTotal) {
+        return NextResponse.json({ error: '연결 항목까지 완료해야 제출할 수 있습니다.' }, { status: 400 })
+      }
     }
 
     await prisma.checklistInstance.update({

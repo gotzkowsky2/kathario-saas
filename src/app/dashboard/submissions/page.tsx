@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import useSWR from 'swr'
 import { 
   CheckCircleIcon, 
   ClockIcon, 
@@ -91,38 +92,26 @@ export default function SubmissionsPage() {
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
   const [filters, setFilters] = useState<SubmissionFilter>({});
 
-  // 제출내역 조회
-  const fetchSubmissions = async () => {
-    try {
-      setLoading(true);
-      const params = new URLSearchParams();
-      
-      if (filters.employeeId) params.append('employeeId', filters.employeeId);
-      if (filters.date) params.append('date', filters.date);
-      if (filters.startDate) params.append('startDate', filters.startDate);
-      if (filters.endDate) params.append('endDate', filters.endDate);
-      if (filters.templateId) params.append('templateId', filters.templateId);
-      if (filters.workplace) params.append('workplace', filters.workplace);
-      if (filters.timeSlot) params.append('timeSlot', filters.timeSlot);
-      if (filters.isCompleted !== undefined) params.append('isCompleted', filters.isCompleted.toString());
-      if (filters.isSubmitted !== undefined) params.append('isSubmitted', filters.isSubmitted.toString());
+  // 제출내역 조회(SWR)
+  const qs = useMemo(()=>{
+    const params = new URLSearchParams();
+    if (filters.employeeId) params.append('employeeId', filters.employeeId);
+    if (filters.date) params.append('date', filters.date);
+    if (filters.startDate) params.append('startDate', filters.startDate);
+    if (filters.endDate) params.append('endDate', filters.endDate);
+    if (filters.templateId) params.append('templateId', filters.templateId);
+    if (filters.workplace) params.append('workplace', filters.workplace);
+    if (filters.timeSlot) params.append('timeSlot', filters.timeSlot);
+    if (filters.isCompleted !== undefined) params.append('isCompleted', filters.isCompleted.toString());
+    if (filters.isSubmitted !== undefined) params.append('isSubmitted', filters.isSubmitted.toString());
+    return params.toString();
+  }, [filters])
 
-      const response = await fetch(`/api/admin/submissions?${params}`, {
-        credentials: 'include'
-      });
-
-      if (!response.ok) {
-        throw new Error('제출내역 조회에 실패했습니다.');
-      }
-
-      const data = await response.json();
-      setSubmissions(data);
-    } catch (error: any) {
-      setError(error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const fetcher = (url: string) => fetch(url, { credentials: 'include' }).then(async r=>{
+    if (!r.ok) throw new Error('제출내역 조회에 실패했습니다.')
+    return r.json()
+  })
+  const { data: swrData, isLoading: swrLoading, error: swrError } = useSWR(`/api/admin/submissions?${qs}`, fetcher, { revalidateOnFocus: false, dedupingInterval: 15000 })
 
   // 직원 목록 조회
   const fetchEmployees = async () => {
@@ -231,8 +220,10 @@ export default function SubmissionsPage() {
   }, []);
 
   useEffect(() => {
-    fetchSubmissions();
-  }, [filters]);
+    if (swrData) setSubmissions(swrData)
+    if (swrError) setError(String(swrError.message||'조회 실패'))
+    setLoading(swrLoading)
+  }, [swrData, swrError, swrLoading])
 
   const stats = calculateStats();
 
