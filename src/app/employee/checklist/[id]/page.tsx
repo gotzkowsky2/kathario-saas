@@ -428,7 +428,22 @@ function ChecklistNode({ node, depth, onToggle, details, onOpenDetail, onInvento
   const indent = (typeof window !== 'undefined' && window.innerWidth <= 360) ? 10 : (typeof window !== 'undefined' && window.innerWidth <= 640 ? 14 : 18)
   return (
     <div className="space-y-2 w-full">
-      <label className="w-full flex items-start gap-2 sm:gap-3 p-2 sm:p-3 rounded-lg border border-gray-200 hover:border-green-200 hover:bg-green-50/30 transition-colors cursor-pointer" style={{ marginLeft: depth * indent }}>
+      <div
+        className="w-full flex items-start gap-2 sm:gap-3 p-2 sm:p-3 rounded-lg border border-gray-200 hover:border-green-200 hover:bg-green-50/30 transition-colors"
+        style={{ marginLeft: depth * indent }}
+        onClick={(e)=>{
+          const hasChildren = Array.isArray(node.children) && node.children.length > 0
+          const hasConnections = Array.isArray(node.connections) && node.connections.length > 0
+          if (hasChildren || hasConnections) {
+            e.preventDefault()
+            e.stopPropagation()
+            return
+          }
+          onToggle(node.id, !node.isCompleted)
+        }}
+        role="group"
+        aria-label="checklist-node"
+      >
         <input
           type="checkbox"
           className="mt-0.5 sm:mt-1 h-4 w-4 appearance-none border border-gray-400 rounded-sm checked:bg-green-600 checked:border-green-600 focus:outline-none focus:ring-2 focus:ring-green-400"
@@ -439,21 +454,22 @@ function ChecklistNode({ node, depth, onToggle, details, onOpenDetail, onInvento
             const hasConnections = Array.isArray(node.connections) && node.connections.length > 0
             if (hasChildren || hasConnections) {
               e.preventDefault()
+              e.stopPropagation()
               return
             }
             onToggle(node.id, e.target.checked)
           }}
         />
         <div className="min-w-0 flex-1">
-          <div className="font-semibold text-gray-900 break-words whitespace-pre-wrap text-sm sm:text-base leading-6">{node.content}</div>
+          <div className="font-semibold text-gray-900 break-words whitespace-pre-wrap text-sm sm:text-base leading-6" onClick={(e)=>{ e.stopPropagation() }}>{node.content}</div>
           {(node.completedBy || node.completedAt) && (
-            <div className="mt-1 text-[11px] md:text-xs text-gray-600 flex items-center gap-2">
+            <div className="mt-1 text-[11px] md:text-xs text-gray-600 flex items-center gap-2" onClick={(e)=>{ e.stopPropagation() }}>
               <span>✅ 완료자: {node.completedBy || '—'}</span>
               {node.completedAt && (<span>{new Date(node.completedAt).toLocaleString()}</span>)}
             </div>
           )}
           {node.instructions && (
-            <div className="text-[11px] sm:text-xs text-gray-500 mt-1 break-words whitespace-pre-wrap leading-6">{node.instructions}</div>
+            <div className="text-[11px] sm:text-xs text-gray-500 mt-1 break-words whitespace-pre-wrap leading-6" onClick={(e)=>{ e.stopPropagation() }}>{node.instructions}</div>
           )}
           {Array.isArray(node.connections) && node.connections.length > 0 && (
             <div className="mt-2 space-y-2">
@@ -466,7 +482,7 @@ function ChecklistNode({ node, depth, onToggle, details, onOpenDetail, onInvento
                   const isInventory = c.itemType === 'inventory'
                   return (
                     <div key={c.connectionId} className="border-b last:border-b-0 border-gray-200 pb-2">
-                      <div className="flex items-start gap-1 sm:gap-2 text-[11px] sm:text-xs text-gray-700 w-full">
+                      <div className="flex items-start gap-1 sm:gap-2 text-[11px] sm:text-xs text-gray-700 w-full" onClick={(e)=>{ e.stopPropagation() }}>
                         <input
                           type="checkbox"
                           className={`mt-0.5 h-3 w-3 appearance-none border border-gray-400 rounded-sm checked:bg-green-600 checked:border-green-600 focus:outline-none focus:ring-1 focus:ring-green-400 ${isInventory ? 'opacity-50 cursor-not-allowed' : ''}`}
@@ -497,7 +513,7 @@ function ChecklistNode({ node, depth, onToggle, details, onOpenDetail, onInvento
                       </div>
 
                       {isInventory && d && (
-                        <div className="mt-2 pl-5 w-full">
+                        <div className="mt-2 pl-5 w-full" onClick={(e)=>{ e.stopPropagation() }}>
                           <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
                             <span className="text-gray-600">현재재고:</span>
                             <span className="font-semibold text-gray-900">{Math.round(d.currentStock||0)} {d.unit}</span>
@@ -516,7 +532,7 @@ function ChecklistNode({ node, depth, onToggle, details, onOpenDetail, onInvento
                       )}
 
                       {c.itemType !== 'inventory' && (
-                        <div className={`mt-2 pl-5 ${c.itemType==='precaution' ? 'bg-orange-50 border border-orange-200 rounded p-2' : 'bg-green-50 border border-green-200 rounded p-2'}`}>
+                        <div className={`mt-2 pl-5 ${c.itemType==='precaution' ? 'bg-orange-50 border border-orange-200 rounded p-2' : 'bg-green-50 border border-green-200 rounded p-2'}`} onClick={(e)=>{ e.stopPropagation() }}>
                           <div 
                             className="text-[12px] sm:text-sm text-gray-700 whitespace-pre-wrap break-words cursor-pointer"
                             onClick={async (e)=>{
